@@ -72,13 +72,16 @@ body {
     height: 100%;
     transform-origin: left center;
     transform-style: preserve-3d;
+    /* 중복 제거 */
     cursor: pointer;
     contain: layout style;
-    transition: transform 1.2s cubic-bezier(0.15, 0.95, 0.2, 1);
-    will-change: transform, z-index;
+    transition: transform 1.5s cubic-bezier(0.15, 0.95, 0.2, 1);
+    /* 1.2s → 0.8s */
+    will-change: transform;
+    /* z-index 제거 (GPU 합성 무관) */
     -webkit-backface-visibility: hidden;
+    /* 중복 제거 */
     backface-visibility: hidden;
-    transform-style: preserve-3d;
 }
 
 .page.flipped {
@@ -91,16 +94,16 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
+    /* 중복 제거 */
+    backface-visibility: hidden;
     background-color: #faf8f5;
     overflow: hidden;
     display: flex;
     justify-content: center;
     align-items: center;
-    contain: strict;
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
+    contain: layout style paint;
+    /* strict → layout style paint (size 제거) */
 }
 
 .page.flipping {
@@ -147,7 +150,6 @@ body {
 /* ── 모바일 단일 페이지 뷰 ─────────────────────────────────────── */
 #mobile-view {
     display: none;
-    /* JS 에서 isMobile() 시 flex 로 전환 */
     position: absolute;
     top: 12px;
     left: 12px;
@@ -156,7 +158,6 @@ body {
     justify-content: center;
     align-items: center;
     cursor: pointer;
-    /* 배경은 투명 — 이미지 여백에 색이 차지 않도록 */
     background: transparent;
 }
 
@@ -171,9 +172,8 @@ body {
     pointer-events: none;
     user-drag: none;
     -webkit-user-drag: none;
-    /* 이미지 실제 영역에만 프레임·그림자 적용 */
     outline: 8px solid #4a3623;
-    outline-offset: 0px;
+    /* 중복 outline-offset 제거 */
     outline-offset: 0px;
     box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5), inset 0 0 12px rgba(255, 255, 255, 0.08);
     opacity: 1;
@@ -399,12 +399,10 @@ body {
 /* ── 모바일 반응형 ─────────────────────────────────────────────── */
 @media (max-width: 768px) {
 
-    /* 북마크 말풍선 숨김 */
     .progress-bookmark {
         display: none;
     }
 
-    /* 페이지 카운터 위치 조정 */
     .controls-container {
         bottom: 18px;
         width: auto;
@@ -415,12 +413,26 @@ body {
         padding: 5px 16px;
     }
 
-    /* 진행바 터치 영역 확대 */
     .progress-container {
         height: 14px;
     }
 
     .progress-container:hover {
         height: 14px;
+    }
+}
+
+/* ── 저사양/모션 감소 환경 ─────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+    .page {
+        transition: none;
+    }
+
+    #mobile-img {
+        transition: none;
+    }
+
+    .progress-bookmark {
+        transition: none;
     }
 }

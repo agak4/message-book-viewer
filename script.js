@@ -269,6 +269,50 @@ function renderBookmarks() {
 }
 
 // ── 데스크탑 페이지 이동 ──────────────────────────────────────────
+const pageTimeouts = new Map();
+const pageTargetState = new Map();
+
+function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
+    const p = document.getElementById(`page-${i}`);
+    if (!p) return;
+
+    if (pageTimeouts.has(i)) {
+        pageTimeouts.get(i).forEach(clearTimeout);
+        pageTimeouts.delete(i);
+    }
+
+    const timeouts = new Set();
+    const addTimer = (time, fn) => {
+        const tid = setTimeout(() => {
+            fn();
+            timeouts.delete(tid);
+        }, time);
+        timeouts.add(tid);
+    };
+    pageTimeouts.set(i, timeouts);
+
+    addTimer(delay, () => {
+        p.style.transitionDuration = `${duration}ms`;
+        p.style.zIndex = zIndexDuringFlip;
+
+        void p.offsetWidth; // Force reflow
+
+        if (flip) {
+            p.classList.add('flipped');
+            addTimer(duration, () => {
+                p.style.zIndex = i;
+                p.style.transitionDuration = '';
+            });
+        } else {
+            p.classList.remove('flipped');
+            addTimer(duration, () => {
+                p.style.zIndex = state.totalPages - i;
+                p.style.transitionDuration = '';
+            });
+        }
+    });
+}
+
 function flipToPage(index) {
     const clamped = Math.max(0, Math.min(index, state.totalPages - 1));
     if (clamped === state.currentPageIndex) return;
@@ -278,36 +322,50 @@ function flipToPage(index) {
     updateBookState();
 }
 
-/** 변경 범위 페이지만 클래스/z-index 업데이트 (O(|delta|)) */
+/** 변경 범위 페이지만 z-index 관리하며 순차적 페이지 전환 효과 */
 function updateBookState() {
-    const prev = state.prevPageIndex;
     const curr = state.currentPageIndex;
 
-    if (prev < curr) {
-        for (let i = prev; i < curr; i++) {
-            const p = document.getElementById(`page-${i}`);
-            if (!p) continue;
-            p.classList.add('flipping');
-            p.classList.add('flipped');
-            // 애니메이션 중간 지점(0.6s) 즈음에 z-index 변경하여 겹침 방지
-            setTimeout(() => {
-                p.style.zIndex = i;
-                p.classList.remove('flipping');
-            }, 600);
-        }
-    } else {
-        for (let i = curr; i < prev; i++) {
-            const p = document.getElementById(`page-${i}`);
-            if (!p) continue;
-            p.classList.add('flipping');
-            p.classList.remove('flipped');
-            // 되돌아올 때는 즉시 z-index를 높여야 위로 올라옴
-            p.style.zIndex = state.totalPages - i;
-            setTimeout(() => {
-                p.classList.remove('flipping');
-            }, 600);
+    const toFlip = [];
+    const toUnflip = [];
+
+    for (let i = 0; i < state.totalPages; i++) {
+        const shouldBeFlipped = i < curr;
+        const currentTarget = pageTargetState.has(i) ? pageTargetState.get(i) : false;
+
+        if (shouldBeFlipped !== currentTarget) {
+            pageTargetState.set(i, shouldBeFlipped);
+            if (shouldBeFlipped) toFlip.push(i);
+            else toUnflip.push(i);
         }
     }
+
+    toFlip.sort((a, b) => a - b);
+    toUnflip.sort((a, b) => b - a);
+
+    const totalFlips = toFlip.length + toUnflip.length;
+    let duration = 1200;
+    let staggerDelay = 120;
+
+    if (totalFlips > 1) {
+        duration = Math.max(400, 1000 - totalFlips * 20);
+        staggerDelay = (1000 - duration) / (totalFlips - 1);
+        if (staggerDelay < 5) staggerDelay = 5;
+    }
+
+    let baseDelay = 0;
+
+    toFlip.forEach(i => {
+        const zIndexDuring = 1000 + i;
+        applyPageFlip(i, true, baseDelay, zIndexDuring, duration);
+        baseDelay += staggerDelay;
+    });
+
+    toUnflip.forEach(i => {
+        const zIndexDuring = 1000 + (state.totalPages - i);
+        applyPageFlip(i, false, baseDelay, zIndexDuring, duration);
+        baseDelay += staggerDelay;
+    });
 
     schedulePriority();
     updateUI();
@@ -321,12 +379,20 @@ function rebuildBookFlippedState() {
     for (let i = 0; i < state.totalPages; i++) {
         const p = document.getElementById(`page-${i}`);
         if (!p) continue;
-        if (i < state.currentPageIndex) {
+        const shouldBeFlipped = i < state.currentPageIndex;
+
+        if (shouldBeFlipped) {
             p.classList.add('flipped');
             p.style.zIndex = i;
         } else {
             p.classList.remove('flipped');
             p.style.zIndex = state.totalPages - i;
+        }
+
+        pageTargetState.set(i, shouldBeFlipped);
+        if (pageTimeouts.has(i)) {
+            pageTimeouts.get(i).forEach(clearTimeout);
+            pageTimeouts.delete(i);
         }
     }
 }
