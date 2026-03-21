@@ -176,7 +176,7 @@ function renderBook() {
         const fpPath = getImagePath(fi);
         const bpPath = getImagePath(bi);
 
-        const fa = imageCache.has(fpPath) ? `src="${fpPath}"` : `data-src="${fpPath}"`;
+        const fa = (i === 0 || imageCache.has(fpPath)) ? `src="${fpPath}"` : `data-src="${fpPath}"`;
         const ba = imageCache.has(bpPath) ? `src="${bpPath}"` : `data-src="${bpPath}"`;
 
         page.innerHTML = `
