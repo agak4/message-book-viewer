@@ -7,9 +7,7 @@ const AppParams = {
     fallbackExtension: 'jpg'
 };
 
-// ── WebP 지원 여부 감지 (비동기, 결과는 즉시 캐싱) ───────────────
-// 구형 브라우저(iOS 13 이하 등)에서는 jpg 로 폴백합니다.
-let supportsWebP = null; // null = 감지 중, true/false = 확정
+let supportsWebP = null;
 
 (function detectWebP() {
     const img = new Image();
@@ -32,16 +30,11 @@ const EAGER_RADIUS = 3;
 const PRELOAD_CONCURRENCY = 4;
 const MOBILE_BREAKPOINT = 768;
 
-// ── 상태 ──────────────────────────────────────────────────────────
 const state = {
-    // 데스크탑: 스프레드 인덱스 (0 ~ totalPages-1)
     currentPageIndex: 0,
     prevPageIndex: 0,
     totalPages: Math.ceil((AppParams.totalImages + 1) / 2),
-
-    // 모바일: 개별 이미지 인덱스 (0 ~ totalImages-1)
     mobileImageIndex: 0,
-
     isDragging: false,
     startX: 0,
     startTime: 0,
@@ -49,7 +42,6 @@ const state = {
     isAnimationEnabled: true
 };
 
-// ── DOM 참조 ──────────────────────────────────────────────────────
 const dom = {
     book: document.getElementById('book'),
     progressBar: document.getElementById('progressBar'),
@@ -58,18 +50,60 @@ const dom = {
     previewImage: document.getElementById('previewImage'),
     previewText: document.getElementById('previewText'),
     pageCounter: document.getElementById('pageCounter'),
-    // #mobile-view 는 init() 에서 동적 생성 후 할당
     mobileView: null,
     mobileImg: null,
     leftStatic: null,
     leftStaticImg: null
 };
 
-// ── 유틸 ──────────────────────────────────────────────────────────
+const imageCache = new Map();
+let preloadQueue = [];
+let activeLoads = 0;
+const pageTimeouts = new Map();
+const pageTargetState = new Map();
+let leftStaticTimer = null;
+let resizeTimer = null;
+let wasMobileRef = false;
+
+/* 애플리케이션 초기화 및 전역 이벤트 설정 */
+function init() {
+    createMobileView();
+    renderBook();
+    initDrag();
+    renderBookmarks();
+    initProgressBar();
+    createSideControlPanel();
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight') {
+            if (isMobile()) navigateMobile(state.mobileImageIndex + 1);
+            else flipToPage(state.currentPageIndex + 1);
+        }
+        if (e.key === 'ArrowLeft') {
+            if (isMobile()) navigateMobile(state.mobileImageIndex - 1);
+            else flipToPage(state.currentPageIndex - 1);
+        }
+    });
+
+    window.addEventListener('resize', onResize);
+
+    wasMobileRef = isMobile();
+    setupLayout();
+
+    const startPreload = () => schedulePriority();
+    if ('requestIdleCallback' in window) {
+        requestIdleCallback(startPreload, { timeout: 500 });
+    } else {
+        setTimeout(startPreload, 200);
+    }
+}
+
+/* 모바일 뷰포트 여부 확인 */
 function isMobile() {
     return window.innerWidth <= MOBILE_BREAKPOINT;
 }
 
+/* 포맷에 맞는 이미지 경로 반환 */
 function getImagePath(num) {
     if (num < 0 || num >= AppParams.totalImages) return '';
     const filename = AppParams.imagePrefix + num.toString().padStart(3, '0');
@@ -79,125 +113,7 @@ function getImagePath(num) {
     return `${AppParams.webpDir}/${filename}.${AppParams.extension}`;
 }
 
-// ── 이미지 캐시 & 우선순위 프리로더 ──────────────────────────────
-const imageCache = new Map(); // path → HTMLImageElement
-let preloadQueue = [];
-let activeLoads = 0;
-
-function enqueue(path, urgent = false) {
-    if (!path || imageCache.has(path)) return;
-
-    const idx = preloadQueue.indexOf(path);
-    if (idx !== -1) {
-        if (urgent && idx !== 0) preloadQueue.splice(idx, 1);
-        else return;
-    }
-
-    if (urgent) preloadQueue.unshift(path);
-    else preloadQueue.push(path);
-
-    drainQueue();
-}
-
-function drainQueue() {
-    while (activeLoads < PRELOAD_CONCURRENCY && preloadQueue.length > 0) {
-        const path = preloadQueue.shift();
-        if (imageCache.has(path)) { drainQueue(); return; }
-
-        activeLoads++;
-        const img = new Image();
-        img.onload = img.onerror = () => {
-            activeLoads--;
-            imageCache.set(path, img);
-            applyToDOM(path, img.src);
-            drainQueue();
-        };
-        img.src = path;
-    }
-}
-
-/** 로드 완료 시 book 내 data-src 요소와 모바일 뷰를 함께 업데이트 */
-function applyToDOM(path, src) {
-    dom.book.querySelectorAll(`img[data-src="${path}"]`).forEach(el => {
-        el.src = src;
-        el.removeAttribute('data-src');
-    });
-
-    // 모바일에서 현재 보고 있는 이미지가 방금 로드됐으면 교체
-    if (dom.mobileImg && dom.mobileImg.dataset.pending === path) {
-        dom.mobileImg.src = src;
-        dom.mobileImg.classList.remove('loading');
-        delete dom.mobileImg.dataset.pending;
-    }
-}
-
-/**
- * 현재 위치 기준 우선순위 재편
- *   - 모바일: mobileImageIndex 기준 ±EAGER_RADIUS 스프레드
- *   - 데스크탑: currentPageIndex 기준 ±EAGER_RADIUS 스프레드
- */
-function schedulePriority() {
-    const centerSpread = isMobile()
-        ? Math.ceil(state.mobileImageIndex / 2)
-        : state.currentPageIndex;
-
-    for (let i = Math.max(0, centerSpread - EAGER_RADIUS);
-        i <= Math.min(state.totalPages - 1, centerSpread + EAGER_RADIUS); i++) {
-        enqueue(getImagePath(i === 0 ? 0 : i * 2), true);
-        enqueue(getImagePath(i === 0 ? 1 : i * 2 + 1), true);
-    }
-    for (let i = 0; i < state.totalPages; i++) {
-        if (Math.abs(i - centerSpread) <= EAGER_RADIUS) continue;
-        enqueue(getImagePath(i === 0 ? 0 : i * 2));
-        enqueue(getImagePath(i === 0 ? 1 : i * 2 + 1));
-    }
-}
-
-// ── 모바일 뷰 ─────────────────────────────────────────────────────
-function createMobileView() {
-    const mv = document.createElement('div');
-    mv.id = 'mobile-view';
-
-    const img = document.createElement('img');
-    img.id = 'mobile-img';
-    img.alt = 'Page';
-    mv.appendChild(img);
-
-    // book-viewport 안에 삽입
-    document.querySelector('.book-viewport').appendChild(mv);
-
-    dom.mobileView = mv;
-    dom.mobileImg = img;
-}
-
-/** 모바일 이미지 표시 업데이트 */
-function updateMobileView() {
-    const path = getImagePath(state.mobileImageIndex);
-    const cached = imageCache.get(path);
-
-    if (cached) {
-        dom.mobileImg.src = cached.src;
-        dom.mobileImg.classList.remove('loading');
-        delete dom.mobileImg.dataset.pending;
-    } else {
-        dom.mobileImg.classList.add('loading');
-        dom.mobileImg.src = path;
-        dom.mobileImg.dataset.pending = path;
-    }
-
-    schedulePriority();
-    updateUI();
-}
-
-/** 모바일 단일 이미지 이동 */
-function navigateMobile(imgIndex) {
-    const clamped = Math.max(0, Math.min(imgIndex, AppParams.totalImages - 1));
-    if (clamped === state.mobileImageIndex) return;
-    state.mobileImageIndex = clamped;
-    updateMobileView();
-}
-
-// ── 레이아웃 전환 (모바일 ↔ 데스크탑) ────────────────────────────
+/* 모바일 및 데스크탑 레이아웃 전환 */
 function setupLayout() {
     if (isMobile()) {
         dom.book.style.display = 'none';
@@ -210,7 +126,43 @@ function setupLayout() {
     }
 }
 
-// ── 책 렌더링 ─────────────────────────────────────────────────────
+/* 윈도우 리사이즈 이벤트 처리 */
+function onResize() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+        const nowMobile = isMobile();
+
+        if (wasMobileRef && !nowMobile) {
+            const synced = Math.ceil(state.mobileImageIndex / 2);
+            state.prevPageIndex = synced;
+            state.currentPageIndex = synced;
+            rebuildBookFlippedState();
+        } else if (!wasMobileRef && nowMobile) {
+            state.mobileImageIndex = state.currentPageIndex * 2;
+        }
+
+        wasMobileRef = nowMobile;
+        setupLayout();
+    }, 150);
+}
+
+/* 모바일 뷰어 요소 생성 및 DOM 추가 */
+function createMobileView() {
+    const mv = document.createElement('div');
+    mv.id = 'mobile-view';
+
+    const img = document.createElement('img');
+    img.id = 'mobile-img';
+    img.alt = 'Page';
+    mv.appendChild(img);
+
+    document.querySelector('.book-viewport').appendChild(mv);
+
+    dom.mobileView = mv;
+    dom.mobileImg = img;
+}
+
+/* 데스크탑 뷰어 책 요소 렌더링 */
 function renderBook() {
     const fragment = document.createDocumentFragment();
 
@@ -248,7 +200,7 @@ function renderBook() {
     dom.leftStaticImg = lsImg;
 }
 
-// ── 북마크 ────────────────────────────────────────────────────────
+/* 하단 북마크 요소 동적 생성 및 이벤트 연결 */
 function renderBookmarks() {
     const track = document.getElementById('bookmarkTrack');
     if (!track) return;
@@ -280,15 +232,247 @@ function renderBookmarks() {
     track.appendChild(fragment);
 }
 
-// ── 데스크탑 페이지 이동 ──────────────────────────────────────────
-const pageTimeouts = new Map();
-const pageTargetState = new Map();
+/* 측면 컨트롤 패널 구성 및 요소 렌더링 */
+function createSideControlPanel() {
+    const panel = document.createElement('div');
+    panel.className = 'side-control-panel show-initial';
 
+    setTimeout(() => {
+        panel.classList.remove('show-initial');
+    }, 6000);
+
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'side-control-btn toggle-anim-btn';
+    toggleBtn.title = '플립 애니메이션 ON/OFF';
+    
+    const iconOn = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+    const iconOff = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>';
+    
+    toggleBtn.innerHTML = iconOn;
+
+    const fullscreenBtn = document.createElement('button');
+    fullscreenBtn.className = 'side-control-btn fullscreen-btn';
+    fullscreenBtn.title = '전체 화면 전환';
+    
+    const iconEnterFS = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>';
+    const iconExitFS = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path></svg>';
+    
+    fullscreenBtn.innerHTML = document.fullscreenElement ? iconExitFS : iconEnterFS;
+
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'side-control-btn prev-page-btn';
+    prevBtn.title = '이전 페이지';
+    prevBtn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'side-control-btn next-page-btn';
+    nextBtn.title = '다음 페이지';
+    nextBtn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>';
+
+    panel.appendChild(toggleBtn);
+    panel.appendChild(fullscreenBtn);
+    panel.appendChild(prevBtn);
+    panel.appendChild(nextBtn);
+    document.body.appendChild(panel);
+
+    fullscreenBtn.addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch((err) => {
+                console.error(`Error attempting to enable fullscreen: ${err.message}`);
+            });
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            }
+        }
+    });
+
+    document.addEventListener('fullscreenchange', () => {
+        fullscreenBtn.innerHTML = document.fullscreenElement ? iconExitFS : iconEnterFS;
+        fullscreenBtn.title = document.fullscreenElement ? '전체 화면 종료' : '전체 화면 전환';
+    });
+
+    toggleBtn.addEventListener('click', () => {
+        state.isAnimationEnabled = !state.isAnimationEnabled;
+        if (state.isAnimationEnabled) {
+            document.body.classList.remove('disable-animation');
+            toggleBtn.classList.remove('off');
+            toggleBtn.innerHTML = iconOn;
+        } else {
+            document.body.classList.add('disable-animation');
+            toggleBtn.classList.add('off');
+            toggleBtn.innerHTML = iconOff;
+            rebuildBookFlippedState();
+        }
+    });
+
+    prevBtn.addEventListener('click', () => {
+        if (isMobile()) navigateMobile(state.mobileImageIndex - 1);
+        else flipToPage(state.currentPageIndex - 1);
+    });
+
+    nextBtn.addEventListener('click', () => {
+        if (isMobile()) navigateMobile(state.mobileImageIndex + 1);
+        else flipToPage(state.currentPageIndex + 1);
+    });
+}
+
+/* 공통 UI 요소(프로그레스 바, 카운터) 업데이트 */
+function updateUI() {
+    const trackMax = AppParams.totalImages - 1;
+
+    if (isMobile()) {
+        const imgIdx = state.mobileImageIndex;
+        dom.pageCounter.textContent = `Page ${Math.max(1, imgIdx)} / ${trackMax}`;
+        if (!state.isDraggingProgressBar) {
+            const pct = (imgIdx / trackMax) * 100;
+            dom.progressBar.value = pct * 100;
+            dom.progressFill.style.width = `${pct}%`;
+        }
+    } else {
+        let disp = state.currentPageIndex * 2;
+        if (disp === 0) disp = 1;
+        dom.pageCounter.textContent = `Page ${disp} / ${trackMax}`;
+        if (!state.isDraggingProgressBar) {
+            const track = Math.min(state.currentPageIndex * 2, trackMax);
+            const pct = (track / trackMax) * 100;
+            dom.progressBar.value = pct * 100;
+            dom.progressFill.style.width = `${pct}%`;
+        }
+    }
+}
+
+/* 화면 드래그 및 탭 제어 이벤트 구성 */
+function initDrag() {
+    const handleStart = (e) => {
+        if (e.target.closest('.progress-container')) return;
+        state.isDragging = true;
+        state.startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+        state.startTime = Date.now();
+        dom.progressFill.classList.add('dragging');
+    };
+
+    const handleEnd = (e) => {
+        if (!state.isDragging) return;
+        state.isDragging = false;
+        
+        const endX = e.type.includes('touch') ? e.changedTouches[0].clientX : e.clientX;
+        const diffX = endX - state.startX;
+        const timeElapsed = Date.now() - state.startTime;
+
+        if (isMobile()) {
+            if (Math.abs(diffX) > 40) {
+                if (diffX < 0) navigateMobile(state.mobileImageIndex + 1);
+                else navigateMobile(state.mobileImageIndex - 1);
+            } else if (Math.abs(diffX) < 10 && timeElapsed < 400) {
+                if (endX > window.innerWidth / 2) navigateMobile(state.mobileImageIndex + 1);
+                else navigateMobile(state.mobileImageIndex - 1);
+            }
+        } else {
+            if (Math.abs(diffX) > 60) {
+                if (diffX < 0) flipToPage(state.currentPageIndex + 1);
+                else flipToPage(state.currentPageIndex - 1);
+            } else if (Math.abs(diffX) < 10 && timeElapsed < 400) {
+                if (e.target.closest('.book')) {
+                    if (endX > window.innerWidth / 2) flipToPage(state.currentPageIndex + 1);
+                    else flipToPage(state.currentPageIndex - 1);
+                }
+            }
+        }
+
+        requestAnimationFrame(() => {
+            dom.progressFill.classList.remove('dragging');
+        });
+    };
+
+    const vp = document.querySelector('.book-viewport');
+    vp.addEventListener('mousedown', handleStart);
+    vp.addEventListener('touchstart', handleStart, { passive: true });
+    window.addEventListener('mouseup', handleEnd);
+    window.addEventListener('touchend', handleEnd);
+}
+
+/* 프로그레스 바 제어 및 페이지 미리보기 이벤트 구성 */
+function initProgressBar() {
+    dom.progressBar.max = 10000;
+
+    const pbStart = () => {
+        state.isDraggingProgressBar = true;
+        dom.progressFill.classList.add('dragging');
+    };
+    const pbEnd = () => {
+        if (state.isDraggingProgressBar) {
+            state.isDraggingProgressBar = false;
+            updateUI();
+            
+            requestAnimationFrame(() => {
+                dom.progressFill.classList.remove('dragging');
+            });
+        }
+    };
+
+    dom.progressBar.addEventListener('mousedown', pbStart);
+    dom.progressBar.addEventListener('touchstart', pbStart, { passive: true });
+    window.addEventListener('mouseup', pbEnd);
+    window.addEventListener('touchend', pbEnd);
+
+    dom.progressBar.addEventListener('input', (e) => {
+        const percent = e.target.value / 10000;
+        dom.progressFill.style.width = `${percent * 100}%`;
+
+        const trackMax = AppParams.totalImages - 1;
+        const targetImgIdx = Math.round(percent * trackMax);
+
+        if (isMobile()) {
+            navigateMobile(targetImgIdx);
+        } else {
+            flipToPage(Math.ceil(targetImgIdx / 2));
+        }
+    });
+
+    dom.progressBar.addEventListener('mousemove', (e) => {
+        if (isMobile()) return;
+
+        const rect = dom.progressBar.getBoundingClientRect();
+        const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        const trackMax = AppParams.totalImages - 1;
+        const hoverPage = Math.round(percent * trackMax);
+        const previewWidth = 110;
+
+        let previewX = e.clientX;
+        if (previewX < previewWidth / 2 + 10) previewX = previewWidth / 2 + 10;
+        if (previewX > window.innerWidth - previewWidth / 2 - 10) previewX = window.innerWidth - previewWidth / 2 - 10;
+
+        dom.pagePreview.style.left = `${previewX}px`;
+        dom.previewText.innerHTML = `Page ${hoverPage === 0 ? 1 : hoverPage}`;
+
+        const path = getImagePath(hoverPage);
+        const cached = imageCache.get(path);
+        dom.previewImage.src = cached ? cached.src : path;
+
+        dom.pagePreview.classList.add('active');
+    });
+
+    dom.progressBar.addEventListener('mouseleave', () => {
+        dom.pagePreview.classList.remove('active');
+    });
+}
+
+/* 데스크탑 뷰어 특정 페이지로 이동 */
+function flipToPage(index) {
+    const clamped = Math.max(0, Math.min(index, state.totalPages - 1));
+    if (clamped === state.currentPageIndex) return;
+
+    state.prevPageIndex = state.currentPageIndex;
+    state.currentPageIndex = clamped;
+    updateBookState();
+}
+
+/* 데스크탑 뷰어 페이지 플립 애니메이션 적용 */
 function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
     const p = document.getElementById(`page-${i}`);
     if (!p) return;
 
-    // 1. 기존 진행 중인 타이머가 있다면 즉시 취소 (초기화)
     if (pageTimeouts.has(i)) {
         pageTimeouts.get(i).forEach(clearTimeout);
         pageTimeouts.delete(i);
@@ -311,7 +495,6 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
         const tid = setTimeout(() => {
             fn();
             timeouts.delete(tid);
-            // 모든 예약 작업이 끝났다면 맵에서 제거하여 메모리 관리
             if (timeouts.size === 0 && pageTimeouts.get(i) === timeouts) {
                 pageTimeouts.delete(i);
             }
@@ -324,7 +507,7 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
         p.style.transitionDuration = `${duration}ms`;
         p.style.zIndex = zIndexDuringFlip;
 
-        void p.offsetWidth; // 엔진 리플로우 강제
+        void p.offsetWidth;
 
         if (flip) {
             p.classList.add('flipped');
@@ -342,39 +525,7 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
     });
 }
 
-function flipToPage(index) {
-    const clamped = Math.max(0, Math.min(index, state.totalPages - 1));
-    if (clamped === state.currentPageIndex) return;
-
-    state.prevPageIndex = state.currentPageIndex;
-    state.currentPageIndex = clamped;
-    updateBookState();
-}
-
-let leftStaticTimer = null;
-
-function updateLeftStatic() {
-    if (!dom.leftStatic) return;
-    if (state.currentPageIndex === 0) {
-        dom.leftStatic.style.display = 'none';
-        return;
-    }
-    const imgIdx = (state.currentPageIndex - 1) * 2 + 1;
-    const path = getImagePath(imgIdx);
-    const cached = imageCache.get(path);
-
-    if (cached) {
-        dom.leftStaticImg.src = cached.src;
-        dom.leftStatic.style.display = 'block';
-    } else {
-        dom.leftStaticImg.onload = () => {
-            dom.leftStatic.style.display = 'block';
-            dom.leftStaticImg.onload = null;
-        };
-        dom.leftStaticImg.src = path;
-    }
-}
-
+/* 데스크탑 뷰어 전체 책 상태 갱신 */
 function updateBookState() {
     const curr = state.currentPageIndex;
 
@@ -442,10 +593,30 @@ function updateBookState() {
     updateUI();
 }
 
-/**
- * 모바일 → 데스크탑 전환 시 책의 모든 flipped 상태를 currentPageIndex 기준으로 재구성
- * (리사이즈 직후 스프레드가 엇나가지 않도록)
- */
+/* 데스크탑 뷰어 정적 왼쪽 페이지 업데이터 */
+function updateLeftStatic() {
+    if (!dom.leftStatic) return;
+    if (state.currentPageIndex === 0) {
+        dom.leftStatic.style.display = 'none';
+        return;
+    }
+    const imgIdx = (state.currentPageIndex - 1) * 2 + 1;
+    const path = getImagePath(imgIdx);
+    const cached = imageCache.get(path);
+
+    if (cached) {
+        dom.leftStaticImg.src = cached.src;
+        dom.leftStatic.style.display = 'block';
+    } else {
+        dom.leftStaticImg.onload = () => {
+            dom.leftStatic.style.display = 'block';
+            dom.leftStaticImg.onload = null;
+        };
+        dom.leftStaticImg.src = path;
+    }
+}
+
+/* 모바일 ↔ 데스크탑 전환 중 플립 상태 복구 */
 function rebuildBookFlippedState() {
     for (let i = 0; i < state.totalPages; i++) {
         const p = document.getElementById(`page-${i}`);
@@ -470,265 +641,96 @@ function rebuildBookFlippedState() {
     updateLeftStatic();
 }
 
-// ── UI 업데이트 ───────────────────────────────────────────────────
-function updateUI() {
-    const trackMax = AppParams.totalImages - 1;
+/* 모바일 뷰어 지정 위치로 이동 */
+function navigateMobile(imgIndex) {
+    const clamped = Math.max(0, Math.min(imgIndex, AppParams.totalImages - 1));
+    if (clamped === state.mobileImageIndex) return;
+    state.mobileImageIndex = clamped;
+    updateMobileView();
+}
 
-    if (isMobile()) {
-        const imgIdx = state.mobileImageIndex;
-        dom.pageCounter.textContent = `Page ${Math.max(1, imgIdx)} / ${trackMax}`;
-        if (!state.isDraggingProgressBar) {
-            const pct = (imgIdx / trackMax) * 100;
-            dom.progressBar.value = pct * 100;
-            dom.progressFill.style.width = `${pct}%`;
-        }
+/* 모바일 뷰어 타겟 이미지 갱신 */
+function updateMobileView() {
+    const path = getImagePath(state.mobileImageIndex);
+    const cached = imageCache.get(path);
+
+    if (cached) {
+        dom.mobileImg.src = cached.src;
+        dom.mobileImg.classList.remove('loading');
+        delete dom.mobileImg.dataset.pending;
     } else {
-        let disp = state.currentPageIndex * 2;
-        if (disp === 0) disp = 1;
-        dom.pageCounter.textContent = `Page ${disp} / ${trackMax}`;
-        if (!state.isDraggingProgressBar) {
-            const track = Math.min(state.currentPageIndex * 2, trackMax);
-            const pct = (track / trackMax) * 100;
-            dom.progressBar.value = pct * 100;
-            dom.progressFill.style.width = `${pct}%`;
-        }
+        dom.mobileImg.classList.add('loading');
+        dom.mobileImg.src = path;
+        dom.mobileImg.dataset.pending = path;
+    }
+
+    schedulePriority();
+    updateUI();
+}
+
+/* 이미지 동적 로딩 큐에 추가 */
+function enqueue(path, urgent = false) {
+    if (!path || imageCache.has(path)) return;
+
+    const idx = preloadQueue.indexOf(path);
+    if (idx !== -1) {
+        if (urgent && idx !== 0) preloadQueue.splice(idx, 1);
+        else return;
+    }
+
+    if (urgent) preloadQueue.unshift(path);
+    else preloadQueue.push(path);
+
+    drainQueue();
+}
+
+/* 이미지 로딩 큐 순차적 처리 */
+function drainQueue() {
+    while (activeLoads < PRELOAD_CONCURRENCY && preloadQueue.length > 0) {
+        const path = preloadQueue.shift();
+        if (imageCache.has(path)) { drainQueue(); return; }
+
+        activeLoads++;
+        const img = new Image();
+        img.onload = img.onerror = () => {
+            activeLoads--;
+            imageCache.set(path, img);
+            applyToDOM(path, img.src);
+            drainQueue();
+        };
+        img.src = path;
     }
 }
 
-// ── 드래그 / 탭 / 스와이프 ───────────────────────────────────────
-function initDrag() {
-    const handleStart = (e) => {
-        if (e.target.closest('.progress-container')) return;
-        state.isDragging = true;
-        state.startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-        state.startTime = Date.now();
-        dom.progressFill.classList.add('dragging');
-    };
+/* 로드 완료된 이미지 DOM 반영 */
+function applyToDOM(path, src) {
+    dom.book.querySelectorAll(`img[data-src="${path}"]`).forEach(el => {
+        el.src = src;
+        el.removeAttribute('data-src');
+    });
 
-    const handleEnd = (e) => {
-        if (!state.isDragging) return;
-        state.isDragging = false;
-        
-        const endX = e.type.includes('touch') ? e.changedTouches[0].clientX : e.clientX;
-        const diffX = endX - state.startX;
-        const timeElapsed = Date.now() - state.startTime;
-
-        if (isMobile()) {
-            // ── 모바일: 스와이프 or 탭 → 개별 이미지 이동 ──
-            if (Math.abs(diffX) > 40) {
-                // 스와이프
-                if (diffX < 0) navigateMobile(state.mobileImageIndex + 1);
-                else navigateMobile(state.mobileImageIndex - 1);
-            } else if (Math.abs(diffX) < 10 && timeElapsed < 400) {
-                // 탭: 화면 중앙 기준 오른쪽 → 다음, 왼쪽 → 이전
-                if (endX > window.innerWidth / 2) navigateMobile(state.mobileImageIndex + 1);
-                else navigateMobile(state.mobileImageIndex - 1);
-            }
-        } else {
-            // ── 데스크탑: 기존 스프레드 이동 ──
-            if (Math.abs(diffX) > 60) {
-                if (diffX < 0) flipToPage(state.currentPageIndex + 1);
-                else flipToPage(state.currentPageIndex - 1);
-            } else if (Math.abs(diffX) < 10 && timeElapsed < 400) {
-                if (e.target.closest('.book')) {
-                    if (endX > window.innerWidth / 2) flipToPage(state.currentPageIndex + 1);
-                    else flipToPage(state.currentPageIndex - 1);
-                }
-            }
-        }
-
-        // 탭 이동 후 애니메이션 제거 효과를 위해 약간의 지연 후 클래스 제거 (브라우저 렌더링 배칭 방지)
-        requestAnimationFrame(() => {
-            dom.progressFill.classList.remove('dragging');
-        });
-    };
-
-    const vp = document.querySelector('.book-viewport');
-    vp.addEventListener('mousedown', handleStart);
-    vp.addEventListener('touchstart', handleStart, { passive: true });
-    window.addEventListener('mouseup', handleEnd);
-    window.addEventListener('touchend', handleEnd);
+    if (dom.mobileImg && dom.mobileImg.dataset.pending === path) {
+        dom.mobileImg.src = src;
+        dom.mobileImg.classList.remove('loading');
+        delete dom.mobileImg.dataset.pending;
+    }
 }
 
-// ── 진행바 ────────────────────────────────────────────────────────
-function initProgressBar() {
-    dom.progressBar.max = 10000;
+/* 현재 상태 기준 이미지 프리로드 우선순위 재정렬 */
+function schedulePriority() {
+    const centerSpread = isMobile()
+        ? Math.ceil(state.mobileImageIndex / 2)
+        : state.currentPageIndex;
 
-    const pbStart = () => {
-        state.isDraggingProgressBar = true;
-        dom.progressFill.classList.add('dragging');
-    };
-    const pbEnd = () => {
-        if (state.isDraggingProgressBar) {
-            state.isDraggingProgressBar = false;
-            updateUI(); // .dragging 클래스가 있는 상태에서 즉시 위치 업데이트
-            
-            requestAnimationFrame(() => {
-                dom.progressFill.classList.remove('dragging');
-            });
-        }
-    };
-
-    dom.progressBar.addEventListener('mousedown', pbStart);
-    dom.progressBar.addEventListener('touchstart', pbStart, { passive: true });
-    window.addEventListener('mouseup', pbEnd);
-    window.addEventListener('touchend', pbEnd);
-
-    dom.progressBar.addEventListener('input', (e) => {
-        const percent = e.target.value / 10000;
-        dom.progressFill.style.width = `${percent * 100}%`;
-
-        const trackMax = AppParams.totalImages - 1;
-        const targetImgIdx = Math.round(percent * trackMax);
-
-        if (isMobile()) {
-            navigateMobile(targetImgIdx);
-        } else {
-            flipToPage(Math.ceil(targetImgIdx / 2));
-        }
-    });
-
-    // 호버 미리보기 (데스크탑 전용)
-    dom.progressBar.addEventListener('mousemove', (e) => {
-        if (isMobile()) return;
-
-        const rect = dom.progressBar.getBoundingClientRect();
-        const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        const trackMax = AppParams.totalImages - 1;
-        const hoverPage = Math.round(percent * trackMax);
-        const previewWidth = 110;
-
-        let previewX = e.clientX;
-        if (previewX < previewWidth / 2 + 10) previewX = previewWidth / 2 + 10;
-        if (previewX > window.innerWidth - previewWidth / 2 - 10) previewX = window.innerWidth - previewWidth / 2 - 10;
-
-        dom.pagePreview.style.left = `${previewX}px`;
-        dom.previewText.innerHTML = `Page ${hoverPage === 0 ? 1 : hoverPage}`;
-
-        const path = getImagePath(hoverPage);
-        const cached = imageCache.get(path);
-        dom.previewImage.src = cached ? cached.src : path;
-
-        dom.pagePreview.classList.add('active');
-    });
-
-    dom.progressBar.addEventListener('mouseleave', () => {
-        dom.pagePreview.classList.remove('active');
-    });
-}
-
-// ── 리사이즈 ─────────────────────────────────────────────────────
-let resizeTimer = null;
-let wasMobileRef = false; // 이전 렌더링 시 모바일 여부 기억
-
-function onResize() {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-        const nowMobile = isMobile();
-
-        if (wasMobileRef && !nowMobile) {
-            // 모바일 → 데스크탑: mobileImageIndex → currentPageIndex 동기화
-            const synced = Math.ceil(state.mobileImageIndex / 2);
-            state.prevPageIndex = synced;
-            state.currentPageIndex = synced;
-            rebuildBookFlippedState();
-        } else if (!wasMobileRef && nowMobile) {
-            // 데스크탑 → 모바일: currentPageIndex → mobileImageIndex 동기화
-            state.mobileImageIndex = state.currentPageIndex * 2;
-        }
-
-        wasMobileRef = nowMobile;
-        setupLayout();
-    }, 150);
-}
-
-// ── 사이드 컨트롤 패널 ──────────────────────────────────────────
-function createSideControlPanel() {
-    const panel = document.createElement('div');
-    panel.className = 'side-control-panel';
-
-    const toggleBtn = document.createElement('button');
-    toggleBtn.className = 'side-control-btn toggle-anim-btn';
-    toggleBtn.title = '플립 애니메이션 ON/OFF';
-    
-    // 동작 중 (ON) 아이콘 - 번개 (✨ 느낌 대신 재생, 화살표 등 가능: 재생 아이콘)
-    const iconOn = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
-    // 정지 (OFF) 아이콘
-    const iconOff = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>';
-    
-    toggleBtn.innerHTML = iconOn;
-
-    const prevBtn = document.createElement('button');
-    prevBtn.className = 'side-control-btn prev-page-btn';
-    prevBtn.title = '이전 페이지';
-    prevBtn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
-
-    const nextBtn = document.createElement('button');
-    nextBtn.className = 'side-control-btn next-page-btn';
-    nextBtn.title = '다음 페이지';
-    nextBtn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>';
-
-    panel.appendChild(toggleBtn);
-    panel.appendChild(prevBtn);
-    panel.appendChild(nextBtn);
-    document.body.appendChild(panel);
-
-    toggleBtn.addEventListener('click', () => {
-        state.isAnimationEnabled = !state.isAnimationEnabled;
-        if (state.isAnimationEnabled) {
-            document.body.classList.remove('disable-animation');
-            toggleBtn.classList.remove('off');
-            toggleBtn.innerHTML = iconOn;
-        } else {
-            document.body.classList.add('disable-animation');
-            toggleBtn.classList.add('off');
-            toggleBtn.innerHTML = iconOff;
-            rebuildBookFlippedState(); // 즉시 애니메이션 완료 상태로 조정
-        }
-    });
-
-    prevBtn.addEventListener('click', () => {
-        if (isMobile()) navigateMobile(state.mobileImageIndex - 1);
-        else flipToPage(state.currentPageIndex - 1);
-    });
-
-    nextBtn.addEventListener('click', () => {
-        if (isMobile()) navigateMobile(state.mobileImageIndex + 1);
-        else flipToPage(state.currentPageIndex + 1);
-    });
-}
-
-// ── 초기화 ────────────────────────────────────────────────────────
-function init() {
-    createMobileView();
-    renderBook();
-    initDrag();
-    renderBookmarks();
-    initProgressBar();
-    createSideControlPanel();
-
-    window.addEventListener('keydown', (e) => {
-        if (e.key === 'ArrowRight') {
-            if (isMobile()) navigateMobile(state.mobileImageIndex + 1);
-            else flipToPage(state.currentPageIndex + 1);
-        }
-        if (e.key === 'ArrowLeft') {
-            if (isMobile()) navigateMobile(state.mobileImageIndex - 1);
-            else flipToPage(state.currentPageIndex - 1);
-        }
-    });
-
-    window.addEventListener('resize', onResize);
-
-    wasMobileRef = isMobile();
-    setupLayout(); // 초기 레이아웃 결정
-
-    // 첫 페인트 이후 백그라운드 프리로드 시작
-    const startPreload = () => schedulePriority();
-    if ('requestIdleCallback' in window) {
-        requestIdleCallback(startPreload, { timeout: 500 });
-    } else {
-        setTimeout(startPreload, 200);
+    for (let i = Math.max(0, centerSpread - EAGER_RADIUS);
+        i <= Math.min(state.totalPages - 1, centerSpread + EAGER_RADIUS); i++) {
+        enqueue(getImagePath(i === 0 ? 0 : i * 2), true);
+        enqueue(getImagePath(i === 0 ? 1 : i * 2 + 1), true);
+    }
+    for (let i = 0; i < state.totalPages; i++) {
+        if (Math.abs(i - centerSpread) <= EAGER_RADIUS) continue;
+        enqueue(getImagePath(i === 0 ? 0 : i * 2));
+        enqueue(getImagePath(i === 0 ? 1 : i * 2 + 1));
     }
 }
 
