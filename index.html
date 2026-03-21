@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+    <title>클리셰 1주년 팬 메세지북</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Do+Hyeon&display=swap" rel="stylesheet">
+    <link rel="icon" href="images/favicon.ico">
+</head>
+<body>
+<div class="ebook-container">
+    <div class="book-viewport">
+        <div class="book" id="book">
+            <!-- JS dynamically injects pages here -->
+        </div>
+    </div>
+    
+
+
+    <div class="controls-container">
+        <div id="pageCounter"></div>
+    </div>
+    
+    <div class="progress-container">
+        <!-- 북마크(말풍선) 렌더링 트랙 (위치 연산용 0px 상단 기준점) -->
+        <div id="bookmarkTrack" class="bookmark-track"></div>
+        <div class="progress-bg"></div>
+        <div class="progress-fill" id="progressFill"></div>
+        <input type="range" id="progressBar" min="0" max="100" value="0">
+        <div id="pagePreview" class="page-preview">
+            <img id="previewImage" src="" alt="Preview">
+            <span id="previewText">Page 1</span>
+        </div>
+    </div>
+</div>
+<script src="script.js"></script>
+</body>
+</html>
