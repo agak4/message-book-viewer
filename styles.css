@@ -2,11 +2,20 @@
    Variables & Theme
    ========================================================================= */
 :root {
+    /*body*/
     --color-body-bg: radial-gradient(ellipse at center, #eee8e0 0%, #c4b9af 100%);
+
+    /*book::before*/
     --color-book-cover: #4a3623;
-    --color-ui-bg-dark: rgba(40, 30, 20, 0.85);
-    --color-ui-accent: #6a4a30;
-    --color-ui-accent-hover: #8a6a50;
+
+    /*side-control-panel, pageCounter*/
+    --color-ui-bg: rgba(40, 30, 20, 0.85);
+
+    /*side-control-btn, progressBar*/
+    --color-ui-btn: #6a4a30;
+
+    /*side-control-btn:hover*/
+    --color-ui-btn-hover: #8a6a50;
 }
 
 /* =========================================================================
@@ -245,7 +254,7 @@ body {
 }
 
 #pageCounter {
-    background: var(--color-ui-bg-dark);
+    background: var(--color-ui-bg);
     color: #fff;
     padding: 6px 20px;
     border-radius: 30px;
@@ -281,7 +290,7 @@ body {
     left: 0;
     height: 100%;
     width: 0%;
-    background: var(--color-ui-accent);
+    background: var(--color-ui-btn);
     z-index: 1;
     pointer-events: none;
     will-change: width;
@@ -328,7 +337,7 @@ body {
     width: 110px;
     height: calc(110px * 1.414);
     background: #fff;
-    border: 3px solid var(--color-ui-accent);
+    border: 3px solid var(--color-ui-btn);
     border-radius: 6px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
     pointer-events: none;
@@ -357,7 +366,7 @@ body {
     position: absolute;
     bottom: 0;
     width: 100%;
-    background: var(--color-ui-bg-dark);
+    background: var(--color-ui-bg);
     color: #fff;
     text-align: center;
     font-size: 13px;
@@ -452,7 +461,7 @@ body {
     right: -50px;
     transform: translateY(-50%);
     width: 70px;
-    background: var(--color-ui-bg-dark);
+    background: var(--color-ui-bg);
     box-shadow: -4px 0 15px rgba(0, 0, 0, 0.3);
     border-radius: 35px 0 0 35px;
     display: flex;
@@ -473,7 +482,7 @@ body {
     width: 44px;
     height: 44px;
     border-radius: 50%;
-    background: var(--color-ui-accent);
+    background: var(--color-ui-btn);
     border: none;
     color: #fff;
     display: flex;
@@ -485,7 +494,7 @@ body {
 }
 
 .side-control-btn:hover {
-    background: var(--color-ui-accent-hover);
+    background: var(--color-ui-btn-hover);
     transform: scale(1.1);
 }
 
