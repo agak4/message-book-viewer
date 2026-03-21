@@ -1,6 +1,17 @@
 /* =========================================================================
+   Variables & Theme
+   ========================================================================= */
+:root {
+    --color-body-bg: radial-gradient(ellipse at center, #eee8e0 0%, #c4b9af 100%);
+    --color-book-cover: #4a3623;
+    --color-ui-bg-dark: rgba(40, 30, 20, 0.85);
+    --color-ui-accent: #6a4a30;
+    --color-ui-accent-hover: #8a6a50;
+}
+
+/* =========================================================================
    Fonts & Global Reset
-========================================================================= */
+   ========================================================================= */
 @font-face {
     font-family: 'NoonnuBasicGothicRegular';
     src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noon-2410@1.0/NoonnuBasicGothicRegular.woff2') format('woff2');
@@ -18,7 +29,7 @@ body {
     width: 100vw;
     height: 100vh;
     overflow: hidden;
-    background: radial-gradient(ellipse at center, #eee8e0 0%, #c4b9af 100%);
+    background: var(--color-body-bg);
     user-select: none;
     -webkit-user-select: none;
 }
@@ -66,7 +77,7 @@ body {
     bottom: -1%;
     left: -0.5%;
     right: -0.5%;
-    background: #4a3623;
+    background: var(--color-book-cover);
     border-radius: 8px;
     box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4), inset 5px 5px 15px rgba(255, 255, 255, 0.1);
     z-index: -1;
@@ -208,7 +219,7 @@ body {
     pointer-events: none;
     user-drag: none;
     -webkit-user-drag: none;
-    outline: 8px solid #4a3623;
+    outline: 8px solid var(--color-book-cover);
     outline-offset: 0px;
     box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5), inset 0 0 12px rgba(255, 255, 255, 0.08);
     opacity: 1;
@@ -234,7 +245,7 @@ body {
 }
 
 #pageCounter {
-    background: rgba(40, 30, 20, 0.85);
+    background: var(--color-ui-bg-dark);
     color: #fff;
     padding: 6px 20px;
     border-radius: 30px;
@@ -270,7 +281,7 @@ body {
     left: 0;
     height: 100%;
     width: 0%;
-    background: #6a4a30;
+    background: var(--color-ui-accent);
     z-index: 1;
     pointer-events: none;
     will-change: width;
@@ -317,7 +328,7 @@ body {
     width: 110px;
     height: calc(110px * 1.414);
     background: #fff;
-    border: 3px solid #6a4a30;
+    border: 3px solid var(--color-ui-accent);
     border-radius: 6px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
     pointer-events: none;
@@ -346,7 +357,7 @@ body {
     position: absolute;
     bottom: 0;
     width: 100%;
-    background: rgba(40, 30, 20, 0.85);
+    background: var(--color-ui-bg-dark);
     color: #fff;
     text-align: center;
     font-size: 13px;
@@ -441,8 +452,8 @@ body {
     right: -50px;
     transform: translateY(-50%);
     width: 70px;
-    background: rgba(40, 30, 20, 0.85);
-    box-shadow: -4px 0 15px rgba(0,0,0,0.3);
+    background: var(--color-ui-bg-dark);
+    box-shadow: -4px 0 15px rgba(0, 0, 0, 0.3);
     border-radius: 35px 0 0 35px;
     display: flex;
     flex-direction: column;
@@ -462,19 +473,19 @@ body {
     width: 44px;
     height: 44px;
     border-radius: 50%;
-    background: #6a4a30;
+    background: var(--color-ui-accent);
     border: none;
     color: #fff;
     display: flex;
     justify-content: center;
     align-items: center;
     cursor: pointer;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     transition: background 0.2s, transform 0.2s;
 }
 
 .side-control-btn:hover {
-    background: #8a6a50;
+    background: var(--color-ui-accent-hover);
     transform: scale(1.1);
 }
 

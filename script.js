@@ -355,6 +355,7 @@ function initDrag() {
     const handleEnd = (e) => {
         if (!state.isDragging) return;
         state.isDragging = false;
+        dom.progressFill.classList.remove('dragging');
         
         const endX = e.type.includes('touch') ? e.changedTouches[0].clientX : e.clientX;
         const diffX = endX - state.startX;
@@ -379,10 +380,6 @@ function initDrag() {
                 }
             }
         }
-
-        requestAnimationFrame(() => {
-            dom.progressFill.classList.remove('dragging');
-        });
     };
 
     const vp = document.querySelector('.book-viewport');
