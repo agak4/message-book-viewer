@@ -1,8 +1,22 @@
 const AppParams = {
     imagePrefix: 'photo',
     totalImages: 127,
-    extension: 'jpg'
+    webpDir: 'images/webp',
+    imgDir: 'images/img',
+    extension: 'webp',
+    fallbackExtension: 'jpg'
 };
+
+// ── WebP 지원 여부 감지 (비동기, 결과는 즉시 캐싱) ───────────────
+// 구형 브라우저(iOS 13 이하 등)에서는 jpg 로 폴백합니다.
+let supportsWebP = null; // null = 감지 중, true/false = 확정
+
+(function detectWebP() {
+    const img = new Image();
+    img.onload = () => { supportsWebP = (img.width === 1); };
+    img.onerror = () => { supportsWebP = false; };
+    img.src = 'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAkA4JZQCdAEO/gHOAAA=';
+})();
 
 const BookmarkList = [
     { page: 2, label: "목차", color: "#F7E5FF" },
@@ -14,21 +28,27 @@ const BookmarkList = [
     { page: 104, label: "1주년<br>축하 메세지", color: "#E4F0FE" }
 ];
 
-// 즉시 표시할 페이지 ±범위
 const EAGER_RADIUS = 3;
-// 백그라운드 동시 요청 수 (브라우저 연결 한도 고려)
 const PRELOAD_CONCURRENCY = 4;
+const MOBILE_BREAKPOINT = 768;
 
+// ── 상태 ──────────────────────────────────────────────────────────
 const state = {
+    // 데스크탑: 스프레드 인덱스 (0 ~ totalPages-1)
     currentPageIndex: 0,
     prevPageIndex: 0,
     totalPages: Math.ceil((AppParams.totalImages + 1) / 2),
+
+    // 모바일: 개별 이미지 인덱스 (0 ~ totalImages-1)
+    mobileImageIndex: 0,
+
     isDragging: false,
     startX: 0,
     startTime: 0,
     isDraggingProgressBar: false
 };
 
+// ── DOM 참조 ──────────────────────────────────────────────────────
 const dom = {
     book: document.getElementById('book'),
     progressBar: document.getElementById('progressBar'),
@@ -36,27 +56,34 @@ const dom = {
     pagePreview: document.getElementById('pagePreview'),
     previewImage: document.getElementById('previewImage'),
     previewText: document.getElementById('previewText'),
-    pageCounter: document.getElementById('pageCounter')
+    pageCounter: document.getElementById('pageCounter'),
+    // #mobile-view 는 init() 에서 동적 생성 후 할당
+    mobileView: null,
+    mobileImg: null
 };
 
-// ── 이미지 캐시 & 우선순위 프리로더 ──────────────────────────────
-const imageCache = new Map(); // path → HTMLImageElement
-let preloadQueue = [];        // 대기 경로 배열 (앞 = 높은 우선순위)
-let activeLoads = 0;
+// ── 유틸 ──────────────────────────────────────────────────────────
+function isMobile() {
+    return window.innerWidth <= MOBILE_BREAKPOINT;
+}
 
 function getImagePath(num) {
     if (num < 0 || num >= AppParams.totalImages) return '';
-    return `images/${AppParams.imagePrefix}${num.toString().padStart(3, '0')}.${AppParams.extension}`;
+    const filename = AppParams.imagePrefix + num.toString().padStart(3, '0');
+    if (supportsWebP === false) {
+        return `${AppParams.imgDir}/${filename}.${AppParams.fallbackExtension}`;
+    }
+    return `${AppParams.webpDir}/${filename}.${AppParams.extension}`;
 }
 
-/**
- * 경로를 큐에 추가합니다.
- * urgent=true 이면 큐 맨 앞에 삽입(현재 페이지 주변 우선).
- */
+// ── 이미지 캐시 & 우선순위 프리로더 ──────────────────────────────
+const imageCache = new Map(); // path → HTMLImageElement
+let preloadQueue = [];
+let activeLoads = 0;
+
 function enqueue(path, urgent = false) {
     if (!path || imageCache.has(path)) return;
 
-    // 이미 대기 중이면 위치만 조정
     const idx = preloadQueue.indexOf(path);
     if (idx !== -1) {
         if (urgent && idx !== 0) preloadQueue.splice(idx, 1);
@@ -69,7 +96,6 @@ function enqueue(path, urgent = false) {
     drainQueue();
 }
 
-/** 동시 요청 수를 지키며 큐를 소진합니다. */
 function drainQueue() {
     while (activeLoads < PRELOAD_CONCURRENCY && preloadQueue.length > 0) {
         const path = preloadQueue.shift();
@@ -87,33 +113,95 @@ function drainQueue() {
     }
 }
 
-/** 로드 완료된 이미지를 data-src 로 대기 중인 DOM 요소에 반영합니다. */
+/** 로드 완료 시 book 내 data-src 요소와 모바일 뷰를 함께 업데이트 */
 function applyToDOM(path, src) {
     dom.book.querySelectorAll(`img[data-src="${path}"]`).forEach(el => {
         el.src = src;
         el.removeAttribute('data-src');
     });
+
+    // 모바일에서 현재 보고 있는 이미지가 방금 로드됐으면 교체
+    if (dom.mobileImg && dom.mobileImg.dataset.pending === path) {
+        dom.mobileImg.src = src;
+        delete dom.mobileImg.dataset.pending;
+    }
 }
 
 /**
- * 현재 페이지 기준으로 프리로드 우선순위를 재편합니다.
- *   1순위: 현재 ±EAGER_RADIUS → urgent 큐 앞 삽입
- *   2순위: 나머지 전체 → 일반 큐 (백그라운드, 이미 캐시된 건 자동 스킵)
+ * 현재 위치 기준 우선순위 재편
+ *   - 모바일: mobileImageIndex 기준 ±EAGER_RADIUS 스프레드
+ *   - 데스크탑: currentPageIndex 기준 ±EAGER_RADIUS 스프레드
  */
 function schedulePriority() {
-    const cur = state.currentPageIndex;
+    const centerSpread = isMobile()
+        ? Math.ceil(state.mobileImageIndex / 2)
+        : state.currentPageIndex;
 
-    // 1) 즉시 범위: urgent
-    for (let i = Math.max(0, cur - EAGER_RADIUS); i <= Math.min(state.totalPages - 1, cur + EAGER_RADIUS); i++) {
+    for (let i = Math.max(0, centerSpread - EAGER_RADIUS);
+        i <= Math.min(state.totalPages - 1, centerSpread + EAGER_RADIUS); i++) {
         enqueue(getImagePath(i === 0 ? 0 : i * 2), true);
         enqueue(getImagePath(i === 0 ? 1 : i * 2 + 1), true);
     }
-
-    // 2) 나머지 전체: 일반 큐
     for (let i = 0; i < state.totalPages; i++) {
-        if (Math.abs(i - cur) <= EAGER_RADIUS) continue;
+        if (Math.abs(i - centerSpread) <= EAGER_RADIUS) continue;
         enqueue(getImagePath(i === 0 ? 0 : i * 2));
         enqueue(getImagePath(i === 0 ? 1 : i * 2 + 1));
+    }
+}
+
+// ── 모바일 뷰 ─────────────────────────────────────────────────────
+function createMobileView() {
+    const mv = document.createElement('div');
+    mv.id = 'mobile-view';
+
+    const img = document.createElement('img');
+    img.id = 'mobile-img';
+    img.alt = 'Page';
+    mv.appendChild(img);
+
+    // book-viewport 안에 삽입
+    document.querySelector('.book-viewport').appendChild(mv);
+
+    dom.mobileView = mv;
+    dom.mobileImg = img;
+}
+
+/** 모바일 이미지 표시 업데이트 */
+function updateMobileView() {
+    const path = getImagePath(state.mobileImageIndex);
+    const cached = imageCache.get(path);
+
+    if (cached) {
+        dom.mobileImg.src = cached.src;
+        delete dom.mobileImg.dataset.pending;
+    } else {
+        // 캐시 미스: 직접 요청하되, 프리로더가 끝나면 교체 가능하도록 표시
+        dom.mobileImg.src = path;
+        dom.mobileImg.dataset.pending = path;
+    }
+
+    schedulePriority();
+    updateUI();
+}
+
+/** 모바일 단일 이미지 이동 */
+function navigateMobile(imgIndex) {
+    const clamped = Math.max(0, Math.min(imgIndex, AppParams.totalImages - 1));
+    if (clamped === state.mobileImageIndex) return;
+    state.mobileImageIndex = clamped;
+    updateMobileView();
+}
+
+// ── 레이아웃 전환 (모바일 ↔ 데스크탑) ────────────────────────────
+function setupLayout() {
+    if (isMobile()) {
+        dom.book.style.display = 'none';
+        dom.mobileView.style.display = 'flex';
+        updateMobileView();
+    } else {
+        dom.book.style.display = '';
+        dom.mobileView.style.display = 'none';
+        updateUI();
     }
 }
 
@@ -131,19 +219,13 @@ function renderBook() {
         const fpPath = getImagePath(fi);
         const bpPath = getImagePath(bi);
 
-        // 이미 캐시된 경우 src, 아직이면 data-src (프리로더가 채워줌)
         const fa = imageCache.has(fpPath) ? `src="${fpPath}"` : `data-src="${fpPath}"`;
         const ba = imageCache.has(bpPath) ? `src="${bpPath}"` : `data-src="${bpPath}"`;
 
         page.innerHTML = `
-            <div class="page-face front">
-                <img ${fa} alt="Page ${fi}">
-            </div>
-            <div class="page-face back">
-                <img ${ba} alt="Page ${bi}">
-            </div>
+            <div class="page-face front"><img ${fa} alt="Page ${fi}"></div>
+            <div class="page-face back"><img ${ba} alt="Page ${bi}"></div>
         `;
-
         page.style.zIndex = state.totalPages - i;
         fragment.appendChild(page);
     }
@@ -184,7 +266,7 @@ function renderBookmarks() {
     track.appendChild(fragment);
 }
 
-// ── 페이지 이동 ───────────────────────────────────────────────────
+// ── 데스크탑 페이지 이동 ──────────────────────────────────────────
 function flipToPage(index) {
     const clamped = Math.max(0, Math.min(index, state.totalPages - 1));
     if (clamped === state.currentPageIndex) return;
@@ -194,58 +276,78 @@ function flipToPage(index) {
     updateBookState();
 }
 
-/** 변경된 범위 페이지만 클래스/z-index 업데이트 (O(|delta|)) */
+/** 변경 범위 페이지만 클래스/z-index 업데이트 (O(|delta|)) */
 function updateBookState() {
     const prev = state.prevPageIndex;
     const curr = state.currentPageIndex;
 
     if (prev < curr) {
         for (let i = prev; i < curr; i++) {
-            const page = document.getElementById(`page-${i}`);
-            if (!page) continue;
-            page.classList.add('flipped');
-            page.style.zIndex = i;
+            const p = document.getElementById(`page-${i}`);
+            if (!p) continue;
+            p.classList.add('flipped');
+            p.style.zIndex = i;
         }
     } else {
         for (let i = curr; i < prev; i++) {
-            const page = document.getElementById(`page-${i}`);
-            if (!page) continue;
-            page.classList.remove('flipped');
-            page.style.zIndex = state.totalPages - i;
+            const p = document.getElementById(`page-${i}`);
+            if (!p) continue;
+            p.classList.remove('flipped');
+            p.style.zIndex = state.totalPages - i;
         }
     }
 
-    schedulePriority(); // 새 위치 기준으로 로딩 우선순위 재편
-    updateMobileTransform();
+    schedulePriority();
     updateUI();
 }
 
-function updateMobileTransform() {
-    if (window.innerWidth <= 768) {
-        dom.book.style.transform = state.currentPageIndex > 0 ? 'translateX(45vw)' : 'translateX(-45vw)';
-    } else {
-        dom.book.style.transform = 'none';
+/**
+ * 모바일 → 데스크탑 전환 시 책의 모든 flipped 상태를 currentPageIndex 기준으로 재구성
+ * (리사이즈 직후 스프레드가 엇나가지 않도록)
+ */
+function rebuildBookFlippedState() {
+    for (let i = 0; i < state.totalPages; i++) {
+        const p = document.getElementById(`page-${i}`);
+        if (!p) continue;
+        if (i < state.currentPageIndex) {
+            p.classList.add('flipped');
+            p.style.zIndex = i;
+        } else {
+            p.classList.remove('flipped');
+            p.style.zIndex = state.totalPages - i;
+        }
     }
 }
 
+// ── UI 업데이트 ───────────────────────────────────────────────────
 function updateUI() {
-    let currentDisp = state.currentPageIndex * 2;
-    if (currentDisp === 0) currentDisp = 1;
+    const trackMax = AppParams.totalImages - 1;
 
-    dom.pageCounter.textContent = `Page ${currentDisp} / ${AppParams.totalImages - 1}`;
-
-    if (!state.isDraggingProgressBar) {
-        const trackMax = AppParams.totalImages - 1;
-        const currentTrack = Math.min(state.currentPageIndex * 2, trackMax);
-        const progressVal = (currentTrack / trackMax) * 100;
-        dom.progressBar.value = progressVal * 100;
-        dom.progressFill.style.width = `${progressVal}%`;
+    if (isMobile()) {
+        const imgIdx = state.mobileImageIndex;
+        dom.pageCounter.textContent = `Page ${Math.max(1, imgIdx)} / ${trackMax}`;
+        if (!state.isDraggingProgressBar) {
+            const pct = (imgIdx / trackMax) * 100;
+            dom.progressBar.value = pct * 100;
+            dom.progressFill.style.width = `${pct}%`;
+        }
+    } else {
+        let disp = state.currentPageIndex * 2;
+        if (disp === 0) disp = 1;
+        dom.pageCounter.textContent = `Page ${disp} / ${trackMax}`;
+        if (!state.isDraggingProgressBar) {
+            const track = Math.min(state.currentPageIndex * 2, trackMax);
+            const pct = (track / trackMax) * 100;
+            dom.progressBar.value = pct * 100;
+            dom.progressFill.style.width = `${pct}%`;
+        }
     }
 }
 
-// ── 드래그 / 스와이프 ─────────────────────────────────────────────
+// ── 드래그 / 탭 / 스와이프 ───────────────────────────────────────
 function initDrag() {
     const handleStart = (e) => {
+        if (e.target.closest('.progress-container')) return;
         state.isDragging = true;
         state.startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
         state.startTime = Date.now();
@@ -259,21 +361,35 @@ function initDrag() {
         const diffX = endX - state.startX;
         const timeElapsed = Date.now() - state.startTime;
 
-        if (Math.abs(diffX) > 60) {
-            if (diffX < 0) flipToPage(state.currentPageIndex + 1);
-            else flipToPage(state.currentPageIndex - 1);
-        } else if (Math.abs(diffX) < 10 && timeElapsed < 400) {
-            if (e.target.closest('.book')) {
-                if (endX > window.innerWidth / 2) flipToPage(state.currentPageIndex + 1);
+        if (isMobile()) {
+            // ── 모바일: 스와이프 or 탭 → 개별 이미지 이동 ──
+            if (Math.abs(diffX) > 40) {
+                // 스와이프
+                if (diffX < 0) navigateMobile(state.mobileImageIndex + 1);
+                else navigateMobile(state.mobileImageIndex - 1);
+            } else if (Math.abs(diffX) < 10 && timeElapsed < 400) {
+                // 탭: 화면 중앙 기준 오른쪽 → 다음, 왼쪽 → 이전
+                if (endX > window.innerWidth / 2) navigateMobile(state.mobileImageIndex + 1);
+                else navigateMobile(state.mobileImageIndex - 1);
+            }
+        } else {
+            // ── 데스크탑: 기존 스프레드 이동 ──
+            if (Math.abs(diffX) > 60) {
+                if (diffX < 0) flipToPage(state.currentPageIndex + 1);
                 else flipToPage(state.currentPageIndex - 1);
+            } else if (Math.abs(diffX) < 10 && timeElapsed < 400) {
+                if (e.target.closest('.book')) {
+                    if (endX > window.innerWidth / 2) flipToPage(state.currentPageIndex + 1);
+                    else flipToPage(state.currentPageIndex - 1);
+                }
             }
         }
     };
 
     const vp = document.querySelector('.book-viewport');
     vp.addEventListener('mousedown', handleStart);
-    window.addEventListener('mouseup', handleEnd);
     vp.addEventListener('touchstart', handleStart, { passive: true });
+    window.addEventListener('mouseup', handleEnd);
     window.addEventListener('touchend', handleEnd);
 }
 
@@ -299,11 +415,19 @@ function initProgressBar() {
         dom.progressFill.style.width = `${percent * 100}%`;
 
         const trackMax = AppParams.totalImages - 1;
-        const targetPage = Math.round(percent * trackMax);
-        flipToPage(Math.ceil(targetPage / 2));
+        const targetImgIdx = Math.round(percent * trackMax);
+
+        if (isMobile()) {
+            navigateMobile(targetImgIdx);
+        } else {
+            flipToPage(Math.ceil(targetImgIdx / 2));
+        }
     });
 
+    // 호버 미리보기 (데스크탑 전용)
     dom.progressBar.addEventListener('mousemove', (e) => {
+        if (isMobile()) return;
+
         const rect = dom.progressBar.getBoundingClientRect();
         const percent = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
         const trackMax = AppParams.totalImages - 1;
@@ -317,7 +441,6 @@ function initProgressBar() {
         dom.pagePreview.style.left = `${previewX}px`;
         dom.previewText.innerHTML = `Page ${hoverPage === 0 ? 1 : hoverPage}`;
 
-        // 캐시에 있으면 캐시 이미지, 아직이면 직접 요청
         const path = getImagePath(hoverPage);
         const cached = imageCache.get(path);
         dom.previewImage.src = cached ? cached.src : path;
@@ -330,30 +453,56 @@ function initProgressBar() {
     });
 }
 
-// ── resize 디바운스 ───────────────────────────────────────────────
+// ── 리사이즈 ─────────────────────────────────────────────────────
 let resizeTimer = null;
-window.addEventListener('resize', () => {
+let wasMobileRef = false; // 이전 렌더링 시 모바일 여부 기억
+
+function onResize() {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(updateMobileTransform, 150);
-});
+    resizeTimer = setTimeout(() => {
+        const nowMobile = isMobile();
+
+        if (wasMobileRef && !nowMobile) {
+            // 모바일 → 데스크탑: mobileImageIndex → currentPageIndex 동기화
+            const synced = Math.ceil(state.mobileImageIndex / 2);
+            state.prevPageIndex = synced;
+            state.currentPageIndex = synced;
+            rebuildBookFlippedState();
+        } else if (!wasMobileRef && nowMobile) {
+            // 데스크탑 → 모바일: currentPageIndex → mobileImageIndex 동기화
+            state.mobileImageIndex = state.currentPageIndex * 2;
+        }
+
+        wasMobileRef = nowMobile;
+        setupLayout();
+    }, 150);
+}
 
 // ── 초기화 ────────────────────────────────────────────────────────
 function init() {
+    createMobileView();
     renderBook();
     initDrag();
     renderBookmarks();
     initProgressBar();
 
     window.addEventListener('keydown', (e) => {
-        if (e.key === 'ArrowRight') flipToPage(state.currentPageIndex + 1);
-        if (e.key === 'ArrowLeft') flipToPage(state.currentPageIndex - 1);
+        if (e.key === 'ArrowRight') {
+            if (isMobile()) navigateMobile(state.mobileImageIndex + 1);
+            else flipToPage(state.currentPageIndex + 1);
+        }
+        if (e.key === 'ArrowLeft') {
+            if (isMobile()) navigateMobile(state.mobileImageIndex - 1);
+            else flipToPage(state.currentPageIndex - 1);
+        }
     });
 
-    updateMobileTransform();
-    updateUI();
+    window.addEventListener('resize', onResize);
 
-    // 첫 화면 페인트 이후 백그라운드 프리로드 시작
-    // requestIdleCallback: 브라우저 유휴 시간에 실행 (없으면 200ms 지연)
+    wasMobileRef = isMobile();
+    setupLayout(); // 초기 레이아웃 결정
+
+    // 첫 페인트 이후 백그라운드 프리로드 시작
     const startPreload = () => schedulePriority();
     if ('requestIdleCallback' in window) {
         requestIdleCallback(startPreload, { timeout: 500 });
