@@ -276,6 +276,7 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
     const p = document.getElementById(`page-${i}`);
     if (!p) return;
 
+    // 1. 기존 진행 중인 타이머가 있다면 즉시 취소 (초기화)
     if (pageTimeouts.has(i)) {
         pageTimeouts.get(i).forEach(clearTimeout);
         pageTimeouts.delete(i);
@@ -286,6 +287,10 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
         const tid = setTimeout(() => {
             fn();
             timeouts.delete(tid);
+            // 모든 예약 작업이 끝났다면 맵에서 제거하여 메모리 관리
+            if (timeouts.size === 0 && pageTimeouts.get(i) === timeouts) {
+                pageTimeouts.delete(i);
+            }
         }, time);
         timeouts.add(tid);
     };
@@ -294,8 +299,8 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
     addTimer(delay, () => {
         p.style.transitionDuration = `${duration}ms`;
         p.style.zIndex = zIndexDuringFlip;
-
-        void p.offsetWidth; // Force reflow
+        
+        void p.offsetWidth; // 엔진 리플로우 강제
 
         if (flip) {
             p.classList.add('flipped');
