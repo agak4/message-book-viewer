@@ -59,7 +59,9 @@ const dom = {
     pageCounter: document.getElementById('pageCounter'),
     // #mobile-view 는 init() 에서 동적 생성 후 할당
     mobileView: null,
-    mobileImg: null
+    mobileImg: null,
+    leftStatic: null,
+    leftStaticImg: null
 };
 
 // ── 유틸 ──────────────────────────────────────────────────────────
@@ -234,6 +236,15 @@ function renderBook() {
 
     dom.book.innerHTML = '';
     dom.book.appendChild(fragment);
+
+    const ls = document.createElement('div');
+    ls.id = 'left-static';
+    const lsImg = document.createElement('img');
+    lsImg.alt = '';
+    ls.appendChild(lsImg);
+    dom.book.appendChild(ls);
+    dom.leftStatic = ls;
+    dom.leftStaticImg = lsImg;
 }
 
 // ── 북마크 ────────────────────────────────────────────────────────
@@ -299,7 +310,7 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
     addTimer(delay, () => {
         p.style.transitionDuration = `${duration}ms`;
         p.style.zIndex = zIndexDuringFlip;
-        
+
         void p.offsetWidth; // 엔진 리플로우 강제
 
         if (flip) {
@@ -327,7 +338,21 @@ function flipToPage(index) {
     updateBookState();
 }
 
-/** 변경 범위 페이지만 z-index 관리하며 순차적 페이지 전환 효과 */
+let leftStaticTimer = null;
+
+function updateLeftStatic() {
+    if (!dom.leftStatic) return;
+    if (state.currentPageIndex === 0) {
+        dom.leftStatic.style.display = 'none';
+        return;
+    }
+    const imgIdx = (state.currentPageIndex - 1) * 2 + 1;
+    const path = getImagePath(imgIdx);
+    const cached = imageCache.get(path);
+    dom.leftStaticImg.src = cached ? cached.src : path;
+    dom.leftStatic.style.display = 'block';
+}
+
 function updateBookState() {
     const curr = state.currentPageIndex;
 
@@ -372,6 +397,11 @@ function updateBookState() {
         baseDelay += staggerDelay;
     });
 
+    if (dom.leftStatic) dom.leftStatic.style.display = 'none';
+    clearTimeout(leftStaticTimer);
+    const showDelay = totalFlips === 0 ? 0 : baseDelay + duration + 80;
+    leftStaticTimer = setTimeout(updateLeftStatic, showDelay);
+
     schedulePriority();
     updateUI();
 }
@@ -400,6 +430,8 @@ function rebuildBookFlippedState() {
             pageTimeouts.delete(i);
         }
     }
+
+    updateLeftStatic();
 }
 
 // ── UI 업데이트 ───────────────────────────────────────────────────
