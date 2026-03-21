@@ -45,7 +45,8 @@ const state = {
     isDragging: false,
     startX: 0,
     startTime: 0,
-    isDraggingProgressBar: false
+    isDraggingProgressBar: false,
+    isAnimationEnabled: true
 };
 
 // ── DOM 참조 ──────────────────────────────────────────────────────
@@ -293,6 +294,18 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
         pageTimeouts.delete(i);
     }
 
+    if (duration === 0 && delay === 0) {
+        p.style.transitionDuration = '0ms';
+        if (flip) {
+            p.classList.add('flipped');
+            p.style.zIndex = i;
+        } else {
+            p.classList.remove('flipped');
+            p.style.zIndex = state.totalPages - i;
+        }
+        return;
+    }
+
     const timeouts = new Set();
     const addTimer = (time, fn) => {
         const tid = setTimeout(() => {
@@ -349,8 +362,17 @@ function updateLeftStatic() {
     const imgIdx = (state.currentPageIndex - 1) * 2 + 1;
     const path = getImagePath(imgIdx);
     const cached = imageCache.get(path);
-    dom.leftStaticImg.src = cached ? cached.src : path;
-    dom.leftStatic.style.display = 'block';
+
+    if (cached) {
+        dom.leftStaticImg.src = cached.src;
+        dom.leftStatic.style.display = 'block';
+    } else {
+        dom.leftStaticImg.onload = () => {
+            dom.leftStatic.style.display = 'block';
+            dom.leftStaticImg.onload = null;
+        };
+        dom.leftStaticImg.src = path;
+    }
 }
 
 function updateBookState() {
@@ -377,7 +399,10 @@ function updateBookState() {
     let duration = 1200;
     let staggerDelay = 120;
 
-    if (totalFlips > 1) {
+    if (!state.isAnimationEnabled) {
+        duration = 0;
+        staggerDelay = 0;
+    } else if (totalFlips > 1) {
         duration = Math.max(400, 1000 - totalFlips * 20);
         staggerDelay = (1000 - duration) / (totalFlips - 1);
         if (staggerDelay < 5) staggerDelay = 5;
@@ -396,6 +421,17 @@ function updateBookState() {
         applyPageFlip(i, false, baseDelay, zIndexDuring, duration);
         baseDelay += staggerDelay;
     });
+
+    if (dom.leftStatic && state.currentPageIndex > 0) {
+        const imgIdx = (state.currentPageIndex - 1) * 2 + 1;
+        const path = getImagePath(imgIdx);
+        const cached = imageCache.get(path);
+        if (cached) {
+            dom.leftStaticImg.src = cached.src;
+        } else {
+            enqueue(path, true);
+        }
+    }
 
     if (dom.leftStatic) dom.leftStatic.style.display = 'none';
     clearTimeout(leftStaticTimer);
@@ -593,6 +629,62 @@ function onResize() {
     }, 150);
 }
 
+// ── 사이드 컨트롤 패널 ──────────────────────────────────────────
+function createSideControlPanel() {
+    const panel = document.createElement('div');
+    panel.className = 'side-control-panel';
+
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'side-control-btn toggle-anim-btn';
+    toggleBtn.title = '플립 애니메이션 ON/OFF';
+    
+    // 동작 중 (ON) 아이콘 - 번개 (✨ 느낌 대신 재생, 화살표 등 가능: 재생 아이콘)
+    const iconOn = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+    // 정지 (OFF) 아이콘
+    const iconOff = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>';
+    
+    toggleBtn.innerHTML = iconOn;
+
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'side-control-btn prev-page-btn';
+    prevBtn.title = '이전 페이지';
+    prevBtn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'side-control-btn next-page-btn';
+    nextBtn.title = '다음 페이지';
+    nextBtn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>';
+
+    panel.appendChild(toggleBtn);
+    panel.appendChild(prevBtn);
+    panel.appendChild(nextBtn);
+    document.body.appendChild(panel);
+
+    toggleBtn.addEventListener('click', () => {
+        state.isAnimationEnabled = !state.isAnimationEnabled;
+        if (state.isAnimationEnabled) {
+            document.body.classList.remove('disable-animation');
+            toggleBtn.classList.remove('off');
+            toggleBtn.innerHTML = iconOn;
+        } else {
+            document.body.classList.add('disable-animation');
+            toggleBtn.classList.add('off');
+            toggleBtn.innerHTML = iconOff;
+            rebuildBookFlippedState(); // 즉시 애니메이션 완료 상태로 조정
+        }
+    });
+
+    prevBtn.addEventListener('click', () => {
+        if (isMobile()) navigateMobile(state.mobileImageIndex - 1);
+        else flipToPage(state.currentPageIndex - 1);
+    });
+
+    nextBtn.addEventListener('click', () => {
+        if (isMobile()) navigateMobile(state.mobileImageIndex + 1);
+        else flipToPage(state.currentPageIndex + 1);
+    });
+}
+
 // ── 초기화 ────────────────────────────────────────────────────────
 function init() {
     createMobileView();
@@ -600,6 +692,7 @@ function init() {
     initDrag();
     renderBookmarks();
     initProgressBar();
+    createSideControlPanel();
 
     window.addEventListener('keydown', (e) => {
         if (e.key === 'ArrowRight') {

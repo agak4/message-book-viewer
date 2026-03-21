@@ -463,3 +463,69 @@ body {
     object-fit: contain;
     display: block;
 }
+
+/* ── 사이드 컨트롤 패널 ───────────────────────────────────────── */
+.side-control-panel {
+    position: fixed;
+    top: 50%;
+    right: -50px;
+    transform: translateY(-50%);
+    width: 70px;
+    background: rgba(40, 30, 20, 0.85);
+    box-shadow: -4px 0 15px rgba(0,0,0,0.3);
+    border-radius: 35px 0 0 35px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 0;
+    gap: 15px;
+    z-index: 300;
+    transition: right 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.side-control-panel:hover {
+    right: 0;
+}
+
+.side-control-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: #6a4a30;
+    border: none;
+    color: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    transition: background 0.2s, transform 0.2s;
+}
+
+.side-control-btn:hover {
+    background: #8a6a50;
+    transform: scale(1.1);
+}
+
+.side-control-btn.toggle-anim-btn.off {
+    background: #444;
+    color: #aaa;
+}
+
+/* 모바일 숨김 */
+@media (max-width: 768px) {
+    .side-control-panel {
+        display: none !important;
+    }
+}
+
+/* 애니메이션 비활성화 상태 */
+body.disable-animation .page {
+    transition: none !important;
+}
+body.disable-animation #mobile-img {
+    transition: none !important;
+}
+body.disable-animation .progress-bookmark {
+    transition: none !important;
+}
