@@ -32,6 +32,7 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -311,12 +312,11 @@ body {
     width: 100%;
     height: 100%;
     background: transparent;
-    outline: none;
-    cursor: pointer;
-    margin: 0;
-    padding: 0;
     z-index: 2;
     touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    outline: none;
+    border: none;
 }
 
 #progressBar::-webkit-slider-thumb {
@@ -326,6 +326,8 @@ body {
     height: 40px;
     background: transparent;
     cursor: pointer;
+    border: none;
+    outline: none;
 }
 
 #progressBar::-moz-range-thumb {
@@ -333,7 +335,12 @@ body {
     height: 40px;
     background: transparent;
     border: none;
+    outline: none;
     cursor: pointer;
+}
+
+#progressBar::-moz-focus-inner {
+    border: 0;
 }
 
 .page-preview {
@@ -519,7 +526,7 @@ body {
     }
 
     .controls-container {
-        bottom: 18px;
+        bottom: 40px;
         width: auto;
     }
 
