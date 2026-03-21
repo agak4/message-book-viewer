@@ -74,7 +74,11 @@ body {
     transform-style: preserve-3d;
     cursor: pointer;
     contain: layout style;
-    transition: transform 1.8s cubic-bezier(0.15, 0.95, 0.2, 1);
+    transition: transform 1.2s cubic-bezier(0.15, 0.95, 0.2, 1);
+    will-change: transform, z-index;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    transform-style: preserve-3d;
 }
 
 .page.flipped {
@@ -95,6 +99,12 @@ body {
     justify-content: center;
     align-items: center;
     contain: strict;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+}
+
+.page.flipping {
+    z-index: 1000 !important;
 }
 
 .page-face.back {
@@ -164,7 +174,14 @@ body {
     /* 이미지 실제 영역에만 프레임·그림자 적용 */
     outline: 8px solid #4a3623;
     outline-offset: 0px;
+    outline-offset: 0px;
     box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5), inset 0 0 12px rgba(255, 255, 255, 0.08);
+    opacity: 1;
+    transition: opacity 0.3s ease-in-out;
+}
+
+#mobile-img.loading {
+    opacity: 0;
 }
 
 /* ── 컨트롤 ──────────────────────────────────────────────────────  */

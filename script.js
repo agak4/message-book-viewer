@@ -123,6 +123,7 @@ function applyToDOM(path, src) {
     // 모바일에서 현재 보고 있는 이미지가 방금 로드됐으면 교체
     if (dom.mobileImg && dom.mobileImg.dataset.pending === path) {
         dom.mobileImg.src = src;
+        dom.mobileImg.classList.remove('loading');
         delete dom.mobileImg.dataset.pending;
     }
 }
@@ -173,9 +174,10 @@ function updateMobileView() {
 
     if (cached) {
         dom.mobileImg.src = cached.src;
+        dom.mobileImg.classList.remove('loading');
         delete dom.mobileImg.dataset.pending;
     } else {
-        // 캐시 미스: 직접 요청하되, 프리로더가 끝나면 교체 가능하도록 표시
+        dom.mobileImg.classList.add('loading');
         dom.mobileImg.src = path;
         dom.mobileImg.dataset.pending = path;
     }
@@ -285,15 +287,25 @@ function updateBookState() {
         for (let i = prev; i < curr; i++) {
             const p = document.getElementById(`page-${i}`);
             if (!p) continue;
+            p.classList.add('flipping');
             p.classList.add('flipped');
-            p.style.zIndex = i;
+            // 애니메이션 중간 지점(0.6s) 즈음에 z-index 변경하여 겹침 방지
+            setTimeout(() => {
+                p.style.zIndex = i;
+                p.classList.remove('flipping');
+            }, 600);
         }
     } else {
         for (let i = curr; i < prev; i++) {
             const p = document.getElementById(`page-${i}`);
             if (!p) continue;
+            p.classList.add('flipping');
             p.classList.remove('flipped');
+            // 되돌아올 때는 즉시 z-index를 높여야 위로 올라옴
             p.style.zIndex = state.totalPages - i;
+            setTimeout(() => {
+                p.classList.remove('flipping');
+            }, 600);
         }
     }
 
