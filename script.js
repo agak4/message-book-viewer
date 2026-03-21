@@ -502,12 +502,13 @@ function initDrag() {
         state.isDragging = true;
         state.startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
         state.startTime = Date.now();
+        dom.progressFill.classList.add('dragging');
     };
 
     const handleEnd = (e) => {
         if (!state.isDragging) return;
         state.isDragging = false;
-
+        
         const endX = e.type.includes('touch') ? e.changedTouches[0].clientX : e.clientX;
         const diffX = endX - state.startX;
         const timeElapsed = Date.now() - state.startTime;
@@ -535,6 +536,11 @@ function initDrag() {
                 }
             }
         }
+
+        // 탭 이동 후 애니메이션 제거 효과를 위해 약간의 지연 후 클래스 제거 (브라우저 렌더링 배칭 방지)
+        requestAnimationFrame(() => {
+            dom.progressFill.classList.remove('dragging');
+        });
     };
 
     const vp = document.querySelector('.book-viewport');
@@ -548,11 +554,18 @@ function initDrag() {
 function initProgressBar() {
     dom.progressBar.max = 10000;
 
-    const pbStart = () => { state.isDraggingProgressBar = true; };
+    const pbStart = () => {
+        state.isDraggingProgressBar = true;
+        dom.progressFill.classList.add('dragging');
+    };
     const pbEnd = () => {
         if (state.isDraggingProgressBar) {
             state.isDraggingProgressBar = false;
-            updateUI();
+            updateUI(); // .dragging 클래스가 있는 상태에서 즉시 위치 업데이트
+            
+            requestAnimationFrame(() => {
+                dom.progressFill.classList.remove('dragging');
+            });
         }
     };
 
