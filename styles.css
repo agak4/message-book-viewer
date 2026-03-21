@@ -48,7 +48,6 @@ body {
     transform-style: preserve-3d;
 }
 
-
 .book::before {
     content: '';
     position: absolute;
@@ -62,9 +61,11 @@ body {
     z-index: -1;
 }
 
-
-
-
+/* ── 페이지 ──────────────────────────────────────────────────────
+   contain: layout style  → 자식의 레이아웃·스타일 변화가 외부에
+   영향을 주지 않도록 격리해 브라우저 재계산 범위를 축소합니다.
+   will-change 는 .flipped 클래스가 붙을 때만 적용(하단 참고)해
+   GPU 레이어를 필요한 시점에만 생성합니다.             ────────── */
 .page {
     position: absolute;
     top: 0;
@@ -74,14 +75,20 @@ body {
     transform-origin: left center;
     transform-style: preserve-3d;
     cursor: pointer;
-    transition: transform 1.8s cubic-bezier(0.15, 0.95, 0.2, 1), z-index 0s 0.5s;
+    contain: layout style;
+    transition: transform 1.8s cubic-bezier(0.15, 0.95, 0.2, 1);
+}
+
+/* 애니메이션 직전에만 GPU 레이어 예약 */
+.page.flipping {
+    will-change: transform;
 }
 
 .page.flipped {
     transform: rotateY(-180deg);
-    transition: transform 1.8s cubic-bezier(0.15, 0.95, 0.2, 1), z-index 0s 0.5s;
 }
 
+/* ── 페이지 면 ────────────────────────────────────────────────── */
 .page-face {
     position: absolute;
     top: 0;
@@ -89,25 +96,24 @@ body {
     width: 100%;
     height: 100%;
     backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
     background-color: #faf8f5;
     overflow: hidden;
     display: flex;
     justify-content: center;
     align-items: center;
+    /* 페이지 면 단위로 페인트 격리 */
+    contain: strict;
 }
 
 .page-face.back {
     transform: rotateY(180deg);
 }
 
-
 .page-face.front::after {
     content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    inset: 0;
     background: linear-gradient(to right,
             rgba(0, 0, 0, 0.4) 0%,
             rgba(0, 0, 0, 0.1) 4%,
@@ -119,10 +125,7 @@ body {
 .page-face.back::after {
     content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    inset: 0;
     background: linear-gradient(to left,
             rgba(0, 0, 0, 0.4) 0%,
             rgba(0, 0, 0, 0.1) 4%,
@@ -138,12 +141,11 @@ body {
     pointer-events: none;
     user-drag: none;
     -webkit-user-drag: none;
+    /* 이미지 디코딩을 메인스레드 밖에서 처리 */
+    decoding: async;
 }
 
-
-
-
-
+/* ── 컨트롤 ──────────────────────────────────────────────────── */
 .controls-container {
     position: absolute;
     bottom: 30px;
@@ -164,6 +166,7 @@ body {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
+/* ── 진행바 ───────────────────────────────────────────────────── */
 .progress-container {
     position: fixed;
     bottom: 0;
@@ -171,6 +174,8 @@ body {
     width: 100vw;
     height: 10px;
     z-index: 200;
+    /* 진행바 영역 페인트 격리 */
+    contain: layout;
     transition: height 0.3s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
@@ -178,13 +183,9 @@ body {
     height: 18px;
 }
 
-
 .progress-bg {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    inset: 0;
     background: rgba(0, 0, 0, 0.15);
     z-index: 0;
 }
@@ -198,6 +199,7 @@ body {
     background: #6a4a30;
     z-index: 1;
     pointer-events: none;
+    will-change: width;
 }
 
 #progressBar {
@@ -228,7 +230,7 @@ body {
     border: none;
 }
 
-
+/* ── 페이지 미리보기 ─────────────────────────────────────────── */
 .page-preview {
     position: absolute;
     bottom: 100%;
@@ -250,14 +252,13 @@ body {
     z-index: 210;
 }
 
-
 .progress-container:hover .page-preview.active {
     opacity: 1;
     visibility: visible;
     transform: translateX(-50%) translateY(-15px);
 }
 
-
+/* ── 북마크 ───────────────────────────────────────────────────── */
 .bookmark-track {
     position: absolute;
     top: 0;
@@ -280,15 +281,14 @@ body {
     font-size: 11px;
     line-height: 1.3;
     text-align: center;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
     pointer-events: auto;
     cursor: pointer;
     font-weight: bold;
     z-index: 10;
     transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    transform-origin: 50% calc(100% + 15px); 
+    transform-origin: 50% calc(100% + 15px);
 }
-
 
 .bookmark-hitbox {
     position: absolute;
@@ -300,7 +300,6 @@ body {
     z-index: -1;
     cursor: pointer;
 }
-
 
 .progress-bookmark::before {
     content: '';
@@ -324,14 +323,15 @@ body {
     top: calc(100% + 12px);
 }
 
-
 .progress-bookmark:nth-child(even) {
     bottom: 50px;
     transform-origin: 50% calc(100% + 50px);
 }
+
 .progress-bookmark:nth-child(even)::before {
     height: 50px;
 }
+
 .progress-bookmark:nth-child(even)::after {
     top: calc(100% + 47px);
 }
@@ -358,7 +358,7 @@ body {
     padding: 4px 0;
 }
 
-
+/* ── 모바일 ───────────────────────────────────────────────────── */
 @media (max-width: 768px) {
     .book {
         width: 180vw;
