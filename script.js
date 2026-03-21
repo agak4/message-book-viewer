@@ -347,7 +347,7 @@ function initDrag() {
     const handleStart = (e) => {
         if (e.target.closest('.progress-container')) return;
         state.isDragging = true;
-        state.startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+        state.startX = e.clientX;
         state.startTime = Date.now();
         dom.progressFill.classList.add('dragging');
     };
@@ -357,7 +357,7 @@ function initDrag() {
         state.isDragging = false;
         dom.progressFill.classList.remove('dragging');
         
-        const endX = e.type.includes('touch') ? e.changedTouches[0].clientX : e.clientX;
+        const endX = e.clientX;
         const diffX = endX - state.startX;
         const timeElapsed = Date.now() - state.startTime;
 
@@ -383,10 +383,8 @@ function initDrag() {
     };
 
     const vp = document.querySelector('.book-viewport');
-    vp.addEventListener('mousedown', handleStart);
-    vp.addEventListener('touchstart', handleStart, { passive: true });
-    window.addEventListener('mouseup', handleEnd);
-    window.addEventListener('touchend', handleEnd);
+    vp.addEventListener('pointerdown', handleStart);
+    window.addEventListener('pointerup', handleEnd);
 }
 
 /* 프로그레스 바 제어 및 페이지 미리보기 이벤트 구성 */
@@ -408,10 +406,8 @@ function initProgressBar() {
         }
     };
 
-    dom.progressBar.addEventListener('mousedown', pbStart);
-    dom.progressBar.addEventListener('touchstart', pbStart, { passive: true });
-    window.addEventListener('mouseup', pbEnd);
-    window.addEventListener('touchend', pbEnd);
+    dom.progressBar.addEventListener('pointerdown', pbStart);
+    window.addEventListener('pointerup', pbEnd);
 
     dom.progressBar.addEventListener('input', (e) => {
         const percent = e.target.value / 10000;
