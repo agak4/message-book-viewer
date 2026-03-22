@@ -57,26 +57,25 @@ const dom = {
 };
 
 const imageCache = new Map();
-
-// ④ path → img 요소 직접 참조 Map (querySelectorAll 대체)
 const pathToImgElements = new Map();
 
 let preloadQueue = [];
 let activeLoads = 0;
 const pageTimeouts = new Map();
 const pageTargetState = new Map();
+// [FIX] rAF 콜백의 stale 실행을 막기 위한 페이지별 세대(generation) 카운터
+const pageFlipGeneration = new Map();
+
 let leftStaticTimer = null;
 let resizeTimer = null;
 let wasMobileRef = false;
 
-/* ④ img 요소를 path 기준으로 Map에 등록 */
 function registerImg(path, el) {
     if (!path || !el) return;
     if (!pathToImgElements.has(path)) pathToImgElements.set(path, []);
     pathToImgElements.get(path).push(el);
 }
 
-/* 애플리케이션 초기화 및 전역 이벤트 설정 */
 function init() {
     createMobileView();
     renderBook();
@@ -109,12 +108,10 @@ function init() {
     }
 }
 
-/* 모바일 뷰포트 여부 확인 */
 function isMobile() {
     return window.innerWidth <= MOBILE_BREAKPOINT;
 }
 
-/* 포맷에 맞는 이미지 경로 반환 */
 function getImagePath(num) {
     if (num < 0 || num >= AppParams.totalImages) return '';
     const filename = AppParams.imagePrefix + num.toString().padStart(3, '0');
@@ -124,7 +121,6 @@ function getImagePath(num) {
     return `${AppParams.webpDir}/${filename}.${AppParams.extension}`;
 }
 
-/* 모바일 및 데스크탑 레이아웃 전환 */
 function setupLayout() {
     if (isMobile()) {
         dom.book.style.display = 'none';
@@ -137,7 +133,6 @@ function setupLayout() {
     }
 }
 
-/* 윈도우 리사이즈 이벤트 처리 */
 function onResize() {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
@@ -157,7 +152,6 @@ function onResize() {
     }, 150);
 }
 
-/* 모바일 뷰어 요소 생성 및 DOM 추가 */
 function createMobileView() {
     const mv = document.createElement('div');
     mv.id = 'mobile-view';
@@ -173,9 +167,6 @@ function createMobileView() {
     dom.mobileImg = img;
 }
 
-/* 데스크탑 뷰어 책 요소 렌더링
- * ④ innerHTML 대신 createElement로 요소 직접 생성 → pathToImgElements에 등록
- */
 function renderBook() {
     pathToImgElements.clear();
     const fragment = document.createDocumentFragment();
@@ -190,7 +181,6 @@ function renderBook() {
         const fpPath = getImagePath(fi);
         const bpPath = getImagePath(bi);
 
-        // front face
         const frontFace = document.createElement('div');
         frontFace.className = 'page-face front';
         const frontImg = document.createElement('img');
@@ -204,7 +194,6 @@ function renderBook() {
         }
         frontFace.appendChild(frontImg);
 
-        // back face
         const backFace = document.createElement('div');
         backFace.className = 'page-face back';
         const backImg = document.createElement('img');
@@ -237,7 +226,6 @@ function renderBook() {
     dom.leftStaticImg = lsImg;
 }
 
-/* 하단 북마크 요소 동적 생성 및 이벤트 연결 */
 function renderBookmarks() {
     const track = document.getElementById('bookmarkTrack');
     if (!track) return;
@@ -269,7 +257,6 @@ function renderBookmarks() {
     track.appendChild(fragment);
 }
 
-/* 측면 컨트롤 패널 구성 및 요소 렌더링 */
 function createSideControlPanel() {
     const panel = document.createElement('div');
     panel.className = 'side-control-panel show-initial';
@@ -354,7 +341,6 @@ function createSideControlPanel() {
     });
 }
 
-/* 공통 UI 요소(프로그레스 바, 카운터) 업데이트 */
 function updateUI() {
     const trackMax = AppParams.totalImages - 1;
 
@@ -379,7 +365,6 @@ function updateUI() {
     }
 }
 
-/* 화면 드래그 및 탭 제어 이벤트 구성 */
 function initDrag() {
     const handleStart = (e) => {
         if (e.target.closest('.progress-container')) return;
@@ -424,7 +409,6 @@ function initDrag() {
     window.addEventListener('pointerup', handleEnd);
 }
 
-/* 프로그레스 바 제어 및 페이지 미리보기 이벤트 구성 */
 function initProgressBar() {
     dom.progressBar.max = 10000;
 
@@ -488,7 +472,6 @@ function initProgressBar() {
     });
 }
 
-/* 데스크탑 뷰어 특정 페이지로 이동 */
 function flipToPage(index) {
     const clamped = Math.max(0, Math.min(index, state.totalPages - 1));
     if (clamped === state.currentPageIndex) return;
@@ -498,8 +481,22 @@ function flipToPage(index) {
     updateBookState();
 }
 
-/* ② 강제 리플로우(void offsetWidth) 제거 → 더블 rAF로 교체
- * 데스크탑 뷰어 페이지 플립 애니메이션 적용
+/*
+ * [FIX] applyPageFlip - 세대(generation) 카운터로 stale rAF 자기 취소
+ *
+ * 버그 원인:
+ *   setTimeout(delay) → rAF1 → rAF2 순서로 ~32ms 후에 실제 flip이 실행된다.
+ *   그 사이에 새로운 flipToPage가 호출되면:
+ *   - pageTimeouts는 clearTimeout으로 취소 가능
+ *   - 하지만 이미 큐에 등록된 rAF는 취소 API가 없음 (cancelAnimationFrame은
+ *     requestAnimationFrame의 반환값이 필요한데, 중첩 구조상 보관이 불가)
+ *   → stale rAF가 뒤늦게 실행되어 새 navigation 상태를 덮어씀 → 페이지 혼재
+ *
+ * 수정:
+ *   applyPageFlip 진입 시 해당 페이지의 generation을 1 증가시키고
+ *   그 값을 클로저로 캡처한다.
+ *   rAF 콜백 실행 시점에 현재 generation과 비교하여
+ *   불일치(=더 새로운 호출이 있었다)면 즉시 return한다.
  */
 function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
     const p = document.getElementById(`page-${i}`);
@@ -510,9 +507,12 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
         pageTimeouts.delete(i);
     }
 
+    // [FIX] 세대값 증가 및 클로저 캡처
+    const gen = (pageFlipGeneration.get(i) || 0) + 1;
+    pageFlipGeneration.set(i, gen);
+
     if (duration === 0 && delay === 0) {
         p.style.transitionDuration = '0ms';
-        // ① 즉시 전환 시에도 will-change는 auto 유지 (GPU 레이어 불필요)
         p.style.willChange = 'auto';
         if (flip) {
             p.classList.add('flipped');
@@ -538,30 +538,31 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
     pageTimeouts.set(i, timeouts);
 
     addTimer(delay, () => {
-        // ① 애니메이션 직전에만 will-change 부여 → GPU 레이어 점유 시간 최소화
         p.style.willChange = 'transform';
         p.style.transitionDuration = `${duration}ms`;
         p.style.zIndex = zIndexDuringFlip;
 
-        // ② void p.offsetWidth 제거 → 더블 rAF로 스타일 커밋 후 클래스 적용
-        // 첫 번째 rAF: 브라우저가 현재 프레임의 스타일 변경을 반영
-        // 두 번째 rAF: 다음 프레임에서 transition이 올바르게 트리거됨
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
+                // [FIX] stale 검사: 세대 불일치 시 자기 취소
+                if (pageFlipGeneration.get(i) !== gen) return;
+
                 if (flip) {
                     p.classList.add('flipped');
                     addTimer(duration, () => {
+                        // [FIX] 완료 콜백도 stale 검사
+                        if (pageFlipGeneration.get(i) !== gen) return;
                         p.style.zIndex = i;
                         p.style.transitionDuration = '';
-                        // ① 애니메이션 완료 후 will-change 해제 → GPU 레이어 반환
                         p.style.willChange = 'auto';
                     });
                 } else {
                     p.classList.remove('flipped');
                     addTimer(duration, () => {
+                        // [FIX] 완료 콜백도 stale 검사
+                        if (pageFlipGeneration.get(i) !== gen) return;
                         p.style.zIndex = state.totalPages - i;
                         p.style.transitionDuration = '';
-                        // ① 애니메이션 완료 후 will-change 해제 → GPU 레이어 반환
                         p.style.willChange = 'auto';
                     });
                 }
@@ -570,7 +571,6 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
     });
 }
 
-/* 데스크탑 뷰어 전체 책 상태 갱신 */
 function updateBookState() {
     const curr = state.currentPageIndex;
 
@@ -638,7 +638,6 @@ function updateBookState() {
     updateUI();
 }
 
-/* 데스크탑 뷰어 정적 왼쪽 페이지 업데이터 */
 function updateLeftStatic() {
     if (!dom.leftStatic) return;
     if (state.currentPageIndex === 0) {
@@ -661,7 +660,6 @@ function updateLeftStatic() {
     }
 }
 
-/* 모바일 ↔ 데스크탑 전환 중 플립 상태 복구 */
 function rebuildBookFlippedState() {
     for (let i = 0; i < state.totalPages; i++) {
         const p = document.getElementById(`page-${i}`);
@@ -676,10 +674,12 @@ function rebuildBookFlippedState() {
             p.style.zIndex = state.totalPages - i;
         }
 
-        // ① 상태 복구 시에는 애니메이션 없으므로 will-change 해제
         p.style.willChange = 'auto';
 
         pageTargetState.set(i, shouldBeFlipped);
+        // [FIX] 강제 재빌드 시에도 generation을 올려 진행 중인 rAF를 무효화
+        pageFlipGeneration.set(i, (pageFlipGeneration.get(i) || 0) + 1);
+
         if (pageTimeouts.has(i)) {
             pageTimeouts.get(i).forEach(clearTimeout);
             pageTimeouts.delete(i);
@@ -689,7 +689,6 @@ function rebuildBookFlippedState() {
     updateLeftStatic();
 }
 
-/* 모바일 뷰어 지정 위치로 이동 */
 function navigateMobile(imgIndex) {
     const clamped = Math.max(0, Math.min(imgIndex, AppParams.totalImages - 1));
     if (clamped === state.mobileImageIndex) return;
@@ -697,7 +696,6 @@ function navigateMobile(imgIndex) {
     updateMobileView();
 }
 
-/* 모바일 뷰어 타겟 이미지 갱신 */
 function updateMobileView() {
     const path = getImagePath(state.mobileImageIndex);
     const cached = imageCache.get(path);
@@ -716,7 +714,6 @@ function updateMobileView() {
     updateUI();
 }
 
-/* 이미지 동적 로딩 큐에 추가 */
 function enqueue(path, urgent = false) {
     if (!path || imageCache.has(path)) return;
 
@@ -732,7 +729,6 @@ function enqueue(path, urgent = false) {
     drainQueue();
 }
 
-/* 이미지 로딩 큐 순차적 처리 */
 function drainQueue() {
     while (activeLoads < PRELOAD_CONCURRENCY && preloadQueue.length > 0) {
         const path = preloadQueue.shift();
@@ -750,20 +746,15 @@ function drainQueue() {
     }
 }
 
-/* ④ 로드 완료된 이미지를 Map으로 O(1) DOM 반영
- * (기존: querySelectorAll로 전체 DOM 탐색 → O(n))
- */
 function applyToDOM(path, src) {
     const els = pathToImgElements.get(path);
     if (els) {
         for (const el of els) {
-            // data-src가 일치하는 요소만 갱신 (이미 src가 설정된 경우 스킵)
             if (el.dataset.src === path) {
                 el.src = src;
                 delete el.dataset.src;
             }
         }
-        // 적용 완료된 path는 Map에서 제거해 메모리 정리
         pathToImgElements.delete(path);
     }
 
@@ -774,7 +765,6 @@ function applyToDOM(path, src) {
     }
 }
 
-/* 현재 상태 기준 이미지 프리로드 우선순위 재정렬 */
 function schedulePriority() {
     const centerSpread = isMobile()
         ? Math.ceil(state.mobileImageIndex / 2)
