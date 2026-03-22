@@ -57,6 +57,10 @@ const dom = {
 };
 
 const imageCache = new Map();
+
+// ④ path → img 요소 직접 참조 Map (querySelectorAll 대체)
+const pathToImgElements = new Map();
+
 let preloadQueue = [];
 let activeLoads = 0;
 const pageTimeouts = new Map();
@@ -64,6 +68,13 @@ const pageTargetState = new Map();
 let leftStaticTimer = null;
 let resizeTimer = null;
 let wasMobileRef = false;
+
+/* ④ img 요소를 path 기준으로 Map에 등록 */
+function registerImg(path, el) {
+    if (!path || !el) return;
+    if (!pathToImgElements.has(path)) pathToImgElements.set(path, []);
+    pathToImgElements.get(path).push(el);
+}
 
 /* 애플리케이션 초기화 및 전역 이벤트 설정 */
 function init() {
@@ -162,8 +173,11 @@ function createMobileView() {
     dom.mobileImg = img;
 }
 
-/* 데스크탑 뷰어 책 요소 렌더링 */
+/* 데스크탑 뷰어 책 요소 렌더링
+ * ④ innerHTML 대신 createElement로 요소 직접 생성 → pathToImgElements에 등록
+ */
 function renderBook() {
+    pathToImgElements.clear();
     const fragment = document.createDocumentFragment();
 
     for (let i = 0; i < state.totalPages; i++) {
@@ -176,13 +190,36 @@ function renderBook() {
         const fpPath = getImagePath(fi);
         const bpPath = getImagePath(bi);
 
-        const fa = (i === 0 || imageCache.has(fpPath)) ? `src="${fpPath}"` : `data-src="${fpPath}"`;
-        const ba = imageCache.has(bpPath) ? `src="${bpPath}"` : `data-src="${bpPath}"`;
+        // front face
+        const frontFace = document.createElement('div');
+        frontFace.className = 'page-face front';
+        const frontImg = document.createElement('img');
+        frontImg.alt = `Page ${fi}`;
+        const fCached = imageCache.get(fpPath);
+        if (fCached) {
+            frontImg.src = fCached.src;
+        } else {
+            frontImg.dataset.src = fpPath;
+            registerImg(fpPath, frontImg);
+        }
+        frontFace.appendChild(frontImg);
 
-        page.innerHTML = `
-            <div class="page-face front"><img ${fa} alt="Page ${fi}"></div>
-            <div class="page-face back"><img ${ba} alt="Page ${bi}"></div>
-        `;
+        // back face
+        const backFace = document.createElement('div');
+        backFace.className = 'page-face back';
+        const backImg = document.createElement('img');
+        backImg.alt = `Page ${bi}`;
+        const bCached = imageCache.get(bpPath);
+        if (bCached) {
+            backImg.src = bCached.src;
+        } else {
+            backImg.dataset.src = bpPath;
+            registerImg(bpPath, backImg);
+        }
+        backFace.appendChild(backImg);
+
+        page.appendChild(frontFace);
+        page.appendChild(backFace);
         page.style.zIndex = state.totalPages - i;
         fragment.appendChild(page);
     }
@@ -244,19 +281,19 @@ function createSideControlPanel() {
     const toggleBtn = document.createElement('button');
     toggleBtn.className = 'side-control-btn toggle-anim-btn';
     toggleBtn.title = '플립 애니메이션 ON/OFF';
-    
+
     const iconOn = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
     const iconOff = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>';
-    
+
     toggleBtn.innerHTML = iconOn;
 
     const fullscreenBtn = document.createElement('button');
     fullscreenBtn.className = 'side-control-btn fullscreen-btn';
     fullscreenBtn.title = '전체 화면 전환';
-    
+
     const iconEnterFS = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>';
     const iconExitFS = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path></svg>';
-    
+
     fullscreenBtn.innerHTML = document.fullscreenElement ? iconExitFS : iconEnterFS;
 
     const prevBtn = document.createElement('button');
@@ -356,7 +393,7 @@ function initDrag() {
         if (!state.isDragging) return;
         state.isDragging = false;
         dom.progressFill.classList.remove('dragging');
-        
+
         const endX = e.clientX;
         const diffX = endX - state.startX;
         const timeElapsed = Date.now() - state.startTime;
@@ -399,7 +436,7 @@ function initProgressBar() {
         if (state.isDraggingProgressBar) {
             state.isDraggingProgressBar = false;
             updateUI();
-            
+
             requestAnimationFrame(() => {
                 dom.progressFill.classList.remove('dragging');
             });
@@ -461,7 +498,9 @@ function flipToPage(index) {
     updateBookState();
 }
 
-/* 데스크탑 뷰어 페이지 플립 애니메이션 적용 */
+/* ② 강제 리플로우(void offsetWidth) 제거 → 더블 rAF로 교체
+ * 데스크탑 뷰어 페이지 플립 애니메이션 적용
+ */
 function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
     const p = document.getElementById(`page-${i}`);
     if (!p) return;
@@ -473,6 +512,8 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
 
     if (duration === 0 && delay === 0) {
         p.style.transitionDuration = '0ms';
+        // ① 즉시 전환 시에도 will-change는 auto 유지 (GPU 레이어 불필요)
+        p.style.willChange = 'auto';
         if (flip) {
             p.classList.add('flipped');
             p.style.zIndex = i;
@@ -497,24 +538,35 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
     pageTimeouts.set(i, timeouts);
 
     addTimer(delay, () => {
+        // ① 애니메이션 직전에만 will-change 부여 → GPU 레이어 점유 시간 최소화
+        p.style.willChange = 'transform';
         p.style.transitionDuration = `${duration}ms`;
         p.style.zIndex = zIndexDuringFlip;
 
-        void p.offsetWidth;
-
-        if (flip) {
-            p.classList.add('flipped');
-            addTimer(duration, () => {
-                p.style.zIndex = i;
-                p.style.transitionDuration = '';
+        // ② void p.offsetWidth 제거 → 더블 rAF로 스타일 커밋 후 클래스 적용
+        // 첫 번째 rAF: 브라우저가 현재 프레임의 스타일 변경을 반영
+        // 두 번째 rAF: 다음 프레임에서 transition이 올바르게 트리거됨
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                if (flip) {
+                    p.classList.add('flipped');
+                    addTimer(duration, () => {
+                        p.style.zIndex = i;
+                        p.style.transitionDuration = '';
+                        // ① 애니메이션 완료 후 will-change 해제 → GPU 레이어 반환
+                        p.style.willChange = 'auto';
+                    });
+                } else {
+                    p.classList.remove('flipped');
+                    addTimer(duration, () => {
+                        p.style.zIndex = state.totalPages - i;
+                        p.style.transitionDuration = '';
+                        // ① 애니메이션 완료 후 will-change 해제 → GPU 레이어 반환
+                        p.style.willChange = 'auto';
+                    });
+                }
             });
-        } else {
-            p.classList.remove('flipped');
-            addTimer(duration, () => {
-                p.style.zIndex = state.totalPages - i;
-                p.style.transitionDuration = '';
-            });
-        }
+        });
     });
 }
 
@@ -624,6 +676,9 @@ function rebuildBookFlippedState() {
             p.style.zIndex = state.totalPages - i;
         }
 
+        // ① 상태 복구 시에는 애니메이션 없으므로 will-change 해제
+        p.style.willChange = 'auto';
+
         pageTargetState.set(i, shouldBeFlipped);
         if (pageTimeouts.has(i)) {
             pageTimeouts.get(i).forEach(clearTimeout);
@@ -695,12 +750,22 @@ function drainQueue() {
     }
 }
 
-/* 로드 완료된 이미지 DOM 반영 */
+/* ④ 로드 완료된 이미지를 Map으로 O(1) DOM 반영
+ * (기존: querySelectorAll로 전체 DOM 탐색 → O(n))
+ */
 function applyToDOM(path, src) {
-    dom.book.querySelectorAll(`img[data-src="${path}"]`).forEach(el => {
-        el.src = src;
-        el.removeAttribute('data-src');
-    });
+    const els = pathToImgElements.get(path);
+    if (els) {
+        for (const el of els) {
+            // data-src가 일치하는 요소만 갱신 (이미 src가 설정된 경우 스킵)
+            if (el.dataset.src === path) {
+                el.src = src;
+                delete el.dataset.src;
+            }
+        }
+        // 적용 완료된 path는 Map에서 제거해 메모리 정리
+        pathToImgElements.delete(path);
+    }
 
     if (dom.mobileImg && dom.mobileImg.dataset.pending === path) {
         dom.mobileImg.src = src;

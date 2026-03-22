@@ -67,6 +67,8 @@ body {
     perspective: 2000px;
     position: relative;
     touch-action: none;
+    /* ⑤ 자체 stacking context 생성 → 하위 요소 레이어 관리 격리 */
+    isolation: isolate;
 }
 
 /* =========================================================================
@@ -79,6 +81,8 @@ body {
     aspect-ratio: 2 / 1.414;
     transform-style: preserve-3d;
     cursor: pointer;
+    /* ⑤ 레이아웃 재계산 범위를 book 내부로 격리 */
+    contain: layout;
 }
 
 .book::before {
@@ -105,7 +109,9 @@ body {
     cursor: pointer;
     contain: layout style;
     transition: transform 1.5s cubic-bezier(0.15, 0.95, 0.2, 1);
-    will-change: transform;
+    /* ① will-change 상시 제거 → applyPageFlip에서 애니메이션 직전/직후 동적 부여/해제
+       전체 64페이지가 GPU 레이어를 상시 점유하던 것을 방지 */
+    will-change: auto;
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
 }
@@ -131,6 +137,7 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
+    /* ⑤ paint 포함: 화면 밖 face의 픽셀 페인트 생략 */
     contain: layout style paint;
     cursor: pointer;
 }
@@ -182,6 +189,8 @@ body {
     pointer-events: none;
     background: #faf8f5;
     display: none;
+    /* ⑤ 정적 요소 페인트 격리 */
+    contain: layout style paint;
 }
 
 #left-static::after {
@@ -218,6 +227,8 @@ body {
     cursor: pointer;
     background: transparent;
     touch-action: none;
+    /* ⑤ 모바일 뷰 페인트 격리 */
+    contain: layout style paint;
 }
 
 #mobile-img {
@@ -254,6 +265,8 @@ body {
     flex-direction: column;
     align-items: center;
     z-index: 100;
+    /* ⑤ UI 오버레이 페인트 격리 → 책 애니메이션 중 불필요한 재페인트 방지 */
+    contain: layout style paint;
 }
 
 #pageCounter {
@@ -272,6 +285,7 @@ body {
     width: 100vw;
     height: 10px;
     z-index: 200;
+    /* ⑤ contain: strict 대신 layout만 적용 (width: 100vw라 size 제외) */
     contain: layout;
     transition: height 0.3s cubic-bezier(0.25, 1, 0.5, 1);
 }
@@ -285,6 +299,8 @@ body {
     inset: 0;
     background: rgba(0, 0, 0, 0.15);
     z-index: 0;
+    /* ⑤ 배경 레이어 페인트 격리 */
+    contain: layout style paint;
 }
 
 .progress-fill {
@@ -309,6 +325,8 @@ body {
     position: relative;
     appearance: none;
     -webkit-appearance: none;
+    padding: 0;
+    margin: 0;
     width: 100%;
     height: 100%;
     background: transparent;
@@ -317,12 +335,13 @@ body {
     -webkit-tap-highlight-color: transparent;
     outline: none;
     border: none;
+    cursor: pointer;
 }
 
 #progressBar::-webkit-slider-thumb {
     appearance: none;
     -webkit-appearance: none;
-    width: 40px;
+    width: 0;
     height: 40px;
     background: transparent;
     cursor: pointer;
@@ -331,7 +350,7 @@ body {
 }
 
 #progressBar::-moz-range-thumb {
-    width: 40px;
+    width: 0;
     height: 40px;
     background: transparent;
     border: none;
@@ -362,6 +381,8 @@ body {
     flex-direction: column;
     overflow: hidden;
     z-index: 210;
+    /* ⑤ 미리보기 팝업 페인트 격리 */
+    contain: layout style paint;
 }
 
 .progress-container:hover .page-preview.active {
@@ -416,6 +437,8 @@ body {
     z-index: 10;
     transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     transform-origin: 50% calc(100% + 15px);
+    /* ⑤ paint 제외: ::before 선이 버블 바깥으로 뻗어나가므로 paint containment 적용 불가 */
+    contain: layout style;
 }
 
 .bookmark-hitbox {
@@ -485,6 +508,8 @@ body {
     gap: 15px;
     z-index: 300;
     transition: right 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+    /* ⑤ 사이드 패널 페인트 격리 → 책 렌더와 분리 */
+    contain: layout style paint;
 }
 
 .side-control-panel.show-initial,
@@ -519,7 +544,7 @@ body {
 
 /* =========================================================================
    Layout Queries & States
-========================================================================= */
+   ========================================================================= */
 @media (max-width: 768px) {
     .progress-bookmark {
         display: none;
