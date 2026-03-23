@@ -172,8 +172,6 @@ body {
     pointer-events: none;
     user-drag: none;
     -webkit-user-drag: none;
-    /* [FIX] alt 텍스트를 투명하게: 이미지 로드 전 텍스트가 보이는 현상 제거 */
-    /* color는 alt 텍스트 색상에만 영향, 이미지 자체에는 영향 없음 */
     color: transparent;
 }
 
@@ -207,7 +205,6 @@ body {
     height: 100%;
     object-fit: contain;
     display: block;
-    /* [FIX] alt 텍스트 투명 처리 */
     color: transparent;
 }
 
@@ -245,7 +242,6 @@ body {
     box-shadow: 0 15px 40px rgba(0, 0, 0, 0.5), inset 0 0 12px rgba(255, 255, 255, 0.08);
     opacity: 1;
     transition: opacity 0.3s ease-in-out;
-    /* [FIX] alt 텍스트 투명 처리 */
     color: transparent;
 }
 
@@ -391,7 +387,6 @@ body {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    /* [FIX] 미리보기 이미지 alt 텍스트도 투명 처리 */
     color: transparent;
 }
 

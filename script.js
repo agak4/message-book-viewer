@@ -63,7 +63,6 @@ let preloadQueue = [];
 let activeLoads = 0;
 const pageTimeouts = new Map();
 const pageTargetState = new Map();
-// [FIX] rAF 콜백의 stale 실행을 막기 위한 페이지별 세대(generation) 카운터
 const pageFlipGeneration = new Map();
 
 let leftStaticTimer = null;
@@ -481,23 +480,6 @@ function flipToPage(index) {
     updateBookState();
 }
 
-/*
- * [FIX] applyPageFlip - 세대(generation) 카운터로 stale rAF 자기 취소
- *
- * 버그 원인:
- *   setTimeout(delay) → rAF1 → rAF2 순서로 ~32ms 후에 실제 flip이 실행된다.
- *   그 사이에 새로운 flipToPage가 호출되면:
- *   - pageTimeouts는 clearTimeout으로 취소 가능
- *   - 하지만 이미 큐에 등록된 rAF는 취소 API가 없음 (cancelAnimationFrame은
- *     requestAnimationFrame의 반환값이 필요한데, 중첩 구조상 보관이 불가)
- *   → stale rAF가 뒤늦게 실행되어 새 navigation 상태를 덮어씀 → 페이지 혼재
- *
- * 수정:
- *   applyPageFlip 진입 시 해당 페이지의 generation을 1 증가시키고
- *   그 값을 클로저로 캡처한다.
- *   rAF 콜백 실행 시점에 현재 generation과 비교하여
- *   불일치(=더 새로운 호출이 있었다)면 즉시 return한다.
- */
 function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
     const p = document.getElementById(`page-${i}`);
     if (!p) return;
@@ -507,7 +489,6 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
         pageTimeouts.delete(i);
     }
 
-    // [FIX] 세대값 증가 및 클로저 캡처
     const gen = (pageFlipGeneration.get(i) || 0) + 1;
     pageFlipGeneration.set(i, gen);
 
@@ -544,13 +525,11 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
 
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-                // [FIX] stale 검사: 세대 불일치 시 자기 취소
                 if (pageFlipGeneration.get(i) !== gen) return;
 
                 if (flip) {
                     p.classList.add('flipped');
                     addTimer(duration, () => {
-                        // [FIX] 완료 콜백도 stale 검사
                         if (pageFlipGeneration.get(i) !== gen) return;
                         p.style.zIndex = i;
                         p.style.transitionDuration = '';
@@ -559,7 +538,6 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
                 } else {
                     p.classList.remove('flipped');
                     addTimer(duration, () => {
-                        // [FIX] 완료 콜백도 stale 검사
                         if (pageFlipGeneration.get(i) !== gen) return;
                         p.style.zIndex = state.totalPages - i;
                         p.style.transitionDuration = '';
@@ -677,7 +655,6 @@ function rebuildBookFlippedState() {
         p.style.willChange = 'auto';
 
         pageTargetState.set(i, shouldBeFlipped);
-        // [FIX] 강제 재빌드 시에도 generation을 올려 진행 중인 rAF를 무효화
         pageFlipGeneration.set(i, (pageFlipGeneration.get(i) || 0) + 1);
 
         if (pageTimeouts.has(i)) {
