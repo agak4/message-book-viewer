@@ -11,8 +11,8 @@ let supportsWebP = null;
 
 (function detectWebP() {
     const img = new Image();
-    img.onload = () => { supportsWebP = (img.width === 1); };
-    img.onerror = () => { supportsWebP = false; };
+    img.onload = () => { console.log('detectWebP success'); supportsWebP = (img.width === 1); };
+    img.onerror = () => { console.log('detectWebP failed'); supportsWebP = false; };
     img.src = 'data:image/webp;base64,UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAkA4JZQCdAEO/gHOAAA=';
 })();
 
@@ -76,6 +76,7 @@ function registerImg(path, el) {
 }
 
 function init() {
+    console.log('init');
     document.body.classList.add('disable-animation');
 
     createMobileView();
@@ -131,6 +132,7 @@ function getImagePath(num) {
 }
 
 function setupLayout() {
+    console.log('setupLayout');
     if (isMobile()) {
         dom.book.style.display = 'none';
         dom.mobileView.style.display = 'flex';
@@ -144,6 +146,7 @@ function setupLayout() {
 }
 
 function onResize() {
+    console.log('onResize');
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
         const nowMobile = isMobile();
@@ -163,6 +166,7 @@ function onResize() {
 }
 
 function createMobileView() {
+    console.log('createMobileView');
     const mv = document.createElement('div');
     mv.id = 'mobile-view';
 
@@ -178,6 +182,7 @@ function createMobileView() {
 }
 
 function renderBook() {
+    console.log('renderBook');
     pathToImgElements.clear();
     const fragment = document.createDocumentFragment();
 
@@ -261,6 +266,7 @@ function renderBook() {
 }
 
 function renderBookmarks() {
+    console.log('renderBookmarks');
     const track = document.getElementById('bookmarkTrack');
     if (!track) return;
 
@@ -292,6 +298,7 @@ function renderBookmarks() {
 }
 
 function createSideControlPanel() {
+    console.log('createSideControlPanel');
     const panel = document.createElement('div');
     panel.className = 'side-control-panel show-initial';
 
@@ -401,7 +408,9 @@ function updateUI() {
 }
 
 function initDrag() {
+    console.log('initDrag');
     const handleStart = (e) => {
+        console.log('handleStart', e.clientX, e.clientY);
         if (e.target.closest('.progress-container')) return;
         state.isDragging = true;
         state.startX = e.clientX;
@@ -410,6 +419,7 @@ function initDrag() {
     };
 
     const handleEnd = (e) => {
+        console.log('handleEnd', e.clientX, e.clientY);
         if (!state.isDragging) return;
         state.isDragging = false;
         dom.progressFill.classList.remove('dragging');
@@ -451,13 +461,17 @@ function initDrag() {
 }
 
 function initProgressBar() {
+    console.log('initProgressBar');
     dom.progressBar.max = 10000;
 
     const pbStart = () => {
+        console.log('pbStart');
         state.isDraggingProgressBar = true;
         dom.progressFill.classList.add('dragging');
     };
+
     const pbEnd = () => {
+        console.log('pbEnd');
         if (state.isDraggingProgressBar) {
             state.isDraggingProgressBar = false;
             updateUI();
@@ -472,6 +486,7 @@ function initProgressBar() {
     window.addEventListener('pointerup', pbEnd);
 
     dom.progressBar.addEventListener('input', (e) => {
+        console.log('progressBar input', e.target.value);
         const percent = e.target.value / 10000;
         dom.progressFill.style.width = `${percent * 100}%`;
 
@@ -521,6 +536,7 @@ function getRestingZIndex(id, flipped) {
 }
 
 function updateCenterAlign() {
+    console.log('updateCenterAlign', state.currentPageIndex);
     if (state.currentPageIndex === -1) {
         dom.book.classList.add('closed-front');
         dom.book.classList.remove('closed-back');
@@ -536,6 +552,7 @@ function updateCenterAlign() {
 }
 
 function flipToPage(index) {
+    console.log('flipToPage', index);
     let clamped = Math.max(-1, Math.min(index, state.totalPages + 1));
 
     const isLastImageRight = ((AppParams.totalImages - 1) % 2 === 0);
@@ -556,6 +573,7 @@ function flipToPage(index) {
 }
 
 function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
+    console.log('applyPageFlip', i, flip, delay, zIndexDuringFlip, duration);
     const p = document.getElementById(`page-${i}`);
     if (!p) return;
 
@@ -625,6 +643,7 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
 }
 
 function updateBookState() {
+    console.log('updateBookState', state.currentPageIndex);
     const curr = state.currentPageIndex;
 
     const toFlip = [];
@@ -683,10 +702,7 @@ function updateBookState() {
 
     toFlip.forEach(i => {
         const order = orderScore(i);
-        // [FIX] 프론트 커버가 뒤로 넘어갈 때(index 0) z-index 점프 최소화
-        // 커버의 resting z-index가 0이고 page-0가 65이므로, 
-        // 애니메이션 중에도 60 정도로 유지하면 컨텐츠 페이지 뒤로 자연스럽게 들어갑니다.
-        const zIndexDuring = (i === 'cover-front' && curr === 0) ? 60 : 1000 + order;
+        const zIndexDuring = 1000 + order;
         applyPageFlip(i, true, baseDelay, zIndexDuring, duration);
         baseDelay += staggerDelay;
     });
@@ -721,7 +737,6 @@ function updateBookState() {
 function updateLeftStatic() {
     if (!dom.leftStatic) return;
 
-    // [FIX] 첫 페이지(0)나 커버(-1) 상태에서는 오버레이 절대 금지 (깜빡임 방지)
     if (state.currentPageIndex <= 0) {
         dom.leftStatic.style.display = 'none';
         dom.leftStaticImg.src = '';
@@ -752,6 +767,7 @@ function updateLeftStatic() {
 }
 
 function rebuildBookFlippedState() {
+    console.log('rebuildBookFlippedState');
     const list = ['cover-front'];
     for (let i = 0; i < state.totalPages; i++) list.push(i);
     list.push('cover-back');
@@ -789,6 +805,7 @@ function rebuildBookFlippedState() {
 }
 
 function navigateMobile(imgIndex) {
+    console.log('navigateMobile', imgIndex);
     const clamped = Math.max(0, Math.min(imgIndex, AppParams.totalImages - 1));
     if (clamped === state.mobileImageIndex) return;
     state.mobileImageIndex = clamped;
@@ -796,6 +813,7 @@ function navigateMobile(imgIndex) {
 }
 
 function updateMobileView() {
+    console.log('updateMobileView');
     const path = getImagePath(state.mobileImageIndex);
     const cached = imageCache.get(path);
 
@@ -865,6 +883,7 @@ function applyToDOM(path, src) {
 }
 
 function schedulePriority() {
+    console.log('schedulePriority');
     const centerSpread = isMobile()
         ? Math.ceil(state.mobileImageIndex / 2)
         : state.currentPageIndex;
