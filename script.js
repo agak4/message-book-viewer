@@ -31,8 +31,8 @@ const PRELOAD_CONCURRENCY = 4;
 const MOBILE_BREAKPOINT = 768;
 
 const state = {
-    currentPageIndex: 0,
-    prevPageIndex: 0,
+    currentPageIndex: -1,
+    prevPageIndex: -1,
     totalPages: Math.ceil((AppParams.totalImages + 1) / 2),
     mobileImageIndex: 0,
     isDragging: false,
@@ -76,6 +76,8 @@ function registerImg(path, el) {
 }
 
 function init() {
+    document.body.classList.add('disable-animation');
+
     createMobileView();
     renderBook();
     initDrag();
@@ -98,6 +100,14 @@ function init() {
 
     wasMobileRef = isMobile();
     setupLayout();
+
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            if (state.isAnimationEnabled) {
+                document.body.classList.remove('disable-animation');
+            }
+        });
+    });
 
     const startPreload = () => schedulePriority();
     if ('requestIdleCallback' in window) {
@@ -129,6 +139,7 @@ function setupLayout() {
         dom.book.style.display = '';
         dom.mobileView.style.display = 'none';
         updateUI();
+        updateCenterAlign();
     }
 }
 
@@ -170,6 +181,18 @@ function renderBook() {
     pathToImgElements.clear();
     const fragment = document.createDocumentFragment();
 
+    const frontCover = document.createElement('div');
+    frontCover.className = 'cover-page cover-front';
+    frontCover.id = 'page-cover-front';
+    const fcFront = document.createElement('div');
+    fcFront.className = 'cover-face front';
+    const fcBack = document.createElement('div');
+    fcBack.className = 'cover-face back';
+    frontCover.appendChild(fcFront);
+    frontCover.appendChild(fcBack);
+    frontCover.style.zIndex = state.totalPages + 2;
+    fragment.appendChild(frontCover);
+
     for (let i = 0; i < state.totalPages; i++) {
         const page = document.createElement('div');
         page.className = 'page';
@@ -208,9 +231,21 @@ function renderBook() {
 
         page.appendChild(frontFace);
         page.appendChild(backFace);
-        page.style.zIndex = state.totalPages - i;
+        page.style.zIndex = state.totalPages - i + 1;
         fragment.appendChild(page);
     }
+
+    const backCover = document.createElement('div');
+    backCover.className = 'cover-page cover-back';
+    backCover.id = 'page-cover-back';
+    const bcFront = document.createElement('div');
+    bcFront.className = 'cover-face front';
+    const bcBack = document.createElement('div');
+    bcBack.className = 'cover-face back';
+    backCover.appendChild(bcFront);
+    backCover.appendChild(bcBack);
+    backCover.style.zIndex = 0;
+    fragment.appendChild(backCover);
 
     dom.book.innerHTML = '';
     dom.book.appendChild(fragment);
@@ -353,10 +388,11 @@ function updateUI() {
         }
     } else {
         let disp = state.currentPageIndex * 2;
+        if (disp < 0) disp = 0;
         if (disp === 0) disp = 1;
         dom.pageCounter.textContent = `Page ${disp} / ${trackMax}`;
         if (!state.isDraggingProgressBar) {
-            const track = Math.min(state.currentPageIndex * 2, trackMax);
+            const track = Math.min(Math.max(0, state.currentPageIndex * 2), trackMax);
             const pct = (track / trackMax) * 100;
             dom.progressBar.value = pct * 100;
             dom.progressFill.style.width = `${pct}%`;
@@ -396,8 +432,14 @@ function initDrag() {
                 else flipToPage(state.currentPageIndex - 1);
             } else if (Math.abs(diffX) < 10 && timeElapsed < 400) {
                 if (e.target.closest('.book')) {
-                    if (endX > window.innerWidth / 2) flipToPage(state.currentPageIndex + 1);
-                    else flipToPage(state.currentPageIndex - 1);
+                    if (state.currentPageIndex === -1) {
+                        flipToPage(state.currentPageIndex + 1);
+                    } else if (state.currentPageIndex === state.totalPages + 1) {
+                        flipToPage(state.currentPageIndex - 1);
+                    } else {
+                        if (endX > window.innerWidth / 2) flipToPage(state.currentPageIndex + 1);
+                        else flipToPage(state.currentPageIndex - 1);
+                    }
                 }
             }
         }
@@ -471,13 +513,46 @@ function initProgressBar() {
     });
 }
 
+function getRestingZIndex(id, flipped) {
+    if (id === 'cover-front') return flipped ? 0 : state.totalPages + 2;
+    if (id === 'cover-back') return flipped ? state.totalPages + 2 : 0;
+    const i = parseInt(id, 10);
+    return flipped ? i + 1 : state.totalPages - i + 1;
+}
+
+function updateCenterAlign() {
+    if (state.currentPageIndex === -1) {
+        dom.book.classList.add('closed-front');
+        dom.book.classList.remove('closed-back');
+        document.body.classList.add('is-front-cover');
+    } else if (state.currentPageIndex === state.totalPages + 1) {
+        dom.book.classList.add('closed-back');
+        dom.book.classList.remove('closed-front');
+        document.body.classList.remove('is-front-cover');
+    } else {
+        dom.book.classList.remove('closed-front', 'closed-back');
+        document.body.classList.remove('is-front-cover');
+    }
+}
+
 function flipToPage(index) {
-    const clamped = Math.max(0, Math.min(index, state.totalPages - 1));
+    let clamped = Math.max(-1, Math.min(index, state.totalPages + 1));
+
+    const isLastImageRight = ((AppParams.totalImages - 1) % 2 === 0);
+    if (isLastImageRight && clamped === state.totalPages) {
+        if (state.currentPageIndex < clamped) {
+            clamped = state.totalPages + 1;
+        } else if (state.currentPageIndex > clamped) {
+            clamped = state.totalPages - 1;
+        }
+    }
+
     if (clamped === state.currentPageIndex) return;
 
     state.prevPageIndex = state.currentPageIndex;
     state.currentPageIndex = clamped;
     updateBookState();
+    updateCenterAlign();
 }
 
 function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
@@ -497,10 +572,10 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
         p.style.willChange = 'auto';
         if (flip) {
             p.classList.add('flipped');
-            p.style.zIndex = i;
+            p.style.zIndex = getRestingZIndex(i, true);
         } else {
             p.classList.remove('flipped');
-            p.style.zIndex = state.totalPages - i;
+            p.style.zIndex = getRestingZIndex(i, false);
         }
         return;
     }
@@ -531,7 +606,7 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
                     p.classList.add('flipped');
                     addTimer(duration, () => {
                         if (pageFlipGeneration.get(i) !== gen) return;
-                        p.style.zIndex = i;
+                        p.style.zIndex = getRestingZIndex(i, true);
                         p.style.transitionDuration = '';
                         p.style.willChange = 'auto';
                     });
@@ -539,7 +614,7 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
                     p.classList.remove('flipped');
                     addTimer(duration, () => {
                         if (pageFlipGeneration.get(i) !== gen) return;
-                        p.style.zIndex = state.totalPages - i;
+                        p.style.zIndex = getRestingZIndex(i, false);
                         p.style.transitionDuration = '';
                         p.style.willChange = 'auto';
                     });
@@ -555,6 +630,13 @@ function updateBookState() {
     const toFlip = [];
     const toUnflip = [];
 
+    let shouldFlipFront = (-1 < curr);
+    let frontTarget = pageTargetState.has('cover-front') ? pageTargetState.get('cover-front') : false;
+    if (shouldFlipFront !== frontTarget) {
+        pageTargetState.set('cover-front', shouldFlipFront);
+        if (shouldFlipFront) toFlip.push('cover-front'); else toUnflip.push('cover-front');
+    }
+
     for (let i = 0; i < state.totalPages; i++) {
         const shouldBeFlipped = i < curr;
         const currentTarget = pageTargetState.has(i) ? pageTargetState.get(i) : false;
@@ -566,8 +648,22 @@ function updateBookState() {
         }
     }
 
-    toFlip.sort((a, b) => a - b);
-    toUnflip.sort((a, b) => b - a);
+    // Back cover logic
+    let shouldFlipBack = (state.totalPages < curr);
+    let backTarget = pageTargetState.has('cover-back') ? pageTargetState.get('cover-back') : false;
+    if (shouldFlipBack !== backTarget) {
+        pageTargetState.set('cover-back', shouldFlipBack);
+        if (shouldFlipBack) toFlip.push('cover-back'); else toUnflip.push('cover-back');
+    }
+
+    const orderScore = (val) => {
+        if (val === 'cover-front') return -1;
+        if (val === 'cover-back') return state.totalPages;
+        return val;
+    };
+
+    toFlip.sort((a, b) => orderScore(a) - orderScore(b));
+    toUnflip.sort((a, b) => orderScore(b) - orderScore(a));
 
     const totalFlips = toFlip.length + toUnflip.length;
     let duration = 1200;
@@ -585,13 +681,15 @@ function updateBookState() {
     let baseDelay = 0;
 
     toFlip.forEach(i => {
-        const zIndexDuring = 1000 + i;
+        const order = orderScore(i);
+        const zIndexDuring = 1000 + order;
         applyPageFlip(i, true, baseDelay, zIndexDuring, duration);
         baseDelay += staggerDelay;
     });
 
     toUnflip.forEach(i => {
-        const zIndexDuring = 1000 + (state.totalPages - i);
+        const order = orderScore(i);
+        const zIndexDuring = 1000 + (state.totalPages - order);
         applyPageFlip(i, false, baseDelay, zIndexDuring, duration);
         baseDelay += staggerDelay;
     });
@@ -607,7 +705,7 @@ function updateBookState() {
         }
     }
 
-    if (dom.leftStatic) dom.leftStatic.style.display = 'none';
+    if (dom.leftStatic) dom.leftStatic.style.opacity = '0';
     clearTimeout(leftStaticTimer);
     const showDelay = totalFlips === 0 ? 0 : baseDelay + duration + 80;
     leftStaticTimer = setTimeout(updateLeftStatic, showDelay);
@@ -619,7 +717,7 @@ function updateBookState() {
 function updateLeftStatic() {
     if (!dom.leftStatic) return;
     if (state.currentPageIndex === 0) {
-        dom.leftStatic.style.display = 'none';
+        dom.leftStatic.style.opacity = '0';
         return;
     }
     const imgIdx = (state.currentPageIndex - 1) * 2 + 1;
@@ -628,10 +726,10 @@ function updateLeftStatic() {
 
     if (cached) {
         dom.leftStaticImg.src = cached.src;
-        dom.leftStatic.style.display = 'block';
+        dom.leftStatic.style.opacity = '1';
     } else {
         dom.leftStaticImg.onload = () => {
-            dom.leftStatic.style.display = 'block';
+            dom.leftStatic.style.opacity = '1';
             dom.leftStaticImg.onload = null;
         };
         dom.leftStaticImg.src = path;
@@ -639,17 +737,25 @@ function updateLeftStatic() {
 }
 
 function rebuildBookFlippedState() {
-    for (let i = 0; i < state.totalPages; i++) {
+    const list = ['cover-front'];
+    for (let i = 0; i < state.totalPages; i++) list.push(i);
+    list.push('cover-back');
+
+    list.forEach(i => {
         const p = document.getElementById(`page-${i}`);
-        if (!p) continue;
-        const shouldBeFlipped = i < state.currentPageIndex;
+        if (!p) return;
+
+        let shouldBeFlipped;
+        if (i === 'cover-front') shouldBeFlipped = (-1 < state.currentPageIndex);
+        else if (i === 'cover-back') shouldBeFlipped = (state.totalPages < state.currentPageIndex);
+        else shouldBeFlipped = (i < state.currentPageIndex);
 
         if (shouldBeFlipped) {
             p.classList.add('flipped');
-            p.style.zIndex = i;
+            p.style.zIndex = getRestingZIndex(i, true);
         } else {
             p.classList.remove('flipped');
-            p.style.zIndex = state.totalPages - i;
+            p.style.zIndex = getRestingZIndex(i, false);
         }
 
         p.style.willChange = 'auto';
@@ -661,9 +767,11 @@ function rebuildBookFlippedState() {
             pageTimeouts.get(i).forEach(clearTimeout);
             pageTimeouts.delete(i);
         }
-    }
+    });
 
+    if (dom.leftStatic) dom.leftStatic.style.opacity = '0';
     updateLeftStatic();
+    updateCenterAlign();
 }
 
 function navigateMobile(imgIndex) {

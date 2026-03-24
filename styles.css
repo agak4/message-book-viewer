@@ -81,49 +81,91 @@ body {
     transform-style: preserve-3d;
     cursor: pointer;
     contain: layout;
+    transition: transform 1.2s cubic-bezier(0.15, 0.95, 0.2, 1);
 }
 
-.book::before {
-    content: '';
+.book.closed-front {
+    transform: translate(-25%, 40px);
+}
+
+.book.closed-back {
+    transform: translateX(25%);
+}
+
+.cover-page {
     position: absolute;
-    /* Increase size */
     top: -2.5%;
     bottom: -2.5%;
-    left: -2.5%;
-    right: -2.5%;
-    background-color: var(--color-book-cover);
-    /* Leather-like texture with sunken center effect */
-    background-image:
-        url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.6' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E"),
-        /* Center depression */
-        radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.35) 0%, transparent 75%),
-        /* Spine valley shadow */
-        linear-gradient(to right, transparent 45%, rgba(0, 0, 0, 0.2) 48%, rgba(0, 0, 0, 0.4) 50%, rgba(0, 0, 0, 0.2) 52%, transparent 55%),
-        /* Side shadows */
-        linear-gradient(to right, rgba(0, 0, 0, 0.2) 0%, transparent 2%, transparent 98%, rgba(0, 0, 0, 0.2) 100%);
-    background-blend-mode: overlay, multiply, multiply, multiply;
-    border-radius: 12px;
-    box-shadow:
-        0 25px 50px rgba(0, 0, 0, 0.5),
-        inset 0 0 60px rgba(0, 0, 0, 0.5);
-    z-index: -2;
+    left: 50%;
+    width: 52.5%;
+    transform-origin: left center;
+    transform-style: preserve-3d;
+    cursor: pointer;
+    contain: layout style;
+    transition: transform 1.5s cubic-bezier(0.15, 0.95, 0.2, 1);
+    will-change: auto;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
 }
 
-.book::after {
+.cover-page.flipped {
+    transform: rotateY(-180deg);
+}
+
+.cover-page.flipping {
+    z-index: 2000 !important;
+}
+
+.cover-face {
+    position: absolute;
+    inset: 0;
+    background-color: var(--color-book-cover);
+    background-image:
+        url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.6' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E"),
+        linear-gradient(to right, rgba(0, 0, 0, 0.2) 0%, transparent 2%, transparent 98%, rgba(0, 0, 0, 0.2) 100%);
+    background-blend-mode: overlay, multiply;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 40px rgba(0, 0, 0, 0.5);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+}
+
+.cover-face.front {
+    border-radius: 0 12px 12px 0;
+}
+
+.cover-face.back {
+    transform: rotateY(180deg);
+    border-radius: 12px 0 0 12px;
+}
+
+.cover-face::after {
     content: '';
     position: absolute;
-    /* Stitching position (between cover edge and content edge) */
-    top: -1.2%;
-    bottom: -1.2%;
-    left: -1.6%;
-    right: -1.6%;
+    top: 1.5%;
+    bottom: 1.5%;
+    left: 3%;
+    right: 3%;
     border: 2px dashed rgba(255, 255, 255, 0.12);
     border-radius: 10px;
-    pointer-events: none;
-    z-index: -1;
-    /* Engraved look for stitching */
     box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.5), 0 0 1px rgba(255, 255, 255, 0.1);
+    pointer-events: none;
 }
+
+/* Inside Left Cover: right edge connects to spine */
+#page-cover-front .cover-face.back::after {
+    right: 0;
+    border-right: none;
+    border-radius: 10px 0 0 10px;
+}
+
+/* Inside Right Cover: left edge connects to spine */
+#page-cover-back .cover-face.front::after {
+    left: 0;
+    border-left: none;
+    border-radius: 0 10px 10px 0;
+}
+
+
 
 .page {
     position: absolute;
@@ -213,7 +255,7 @@ body {
     z-index: 500;
     pointer-events: none;
     background: #faf8f5;
-    display: none;
+    opacity: 0;
     contain: layout style paint;
 }
 
@@ -291,6 +333,14 @@ body {
     align-items: center;
     z-index: 100;
     contain: layout style paint;
+    transition: transform 1.2s cubic-bezier(0.15, 0.95, 0.2, 1) 0.5s, opacity 1.2s cubic-bezier(0.15, 0.95, 0.2, 1) 0.5s;
+}
+
+body.is-front-cover .controls-container {
+    transform: translate(-50%, 60px);
+    opacity: 0;
+    pointer-events: none;
+    transition-delay: 0s, 0s;
 }
 
 #pageCounter {
@@ -310,7 +360,14 @@ body {
     height: 10px;
     z-index: 200;
     contain: layout;
-    transition: height 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+    transition: height 0.3s cubic-bezier(0.25, 1, 0.5, 1), transform 1.2s cubic-bezier(0.15, 0.95, 0.2, 1) 1.0s, opacity 1.2s cubic-bezier(0.15, 0.95, 0.2, 1) 1.0s;
+}
+
+body.is-front-cover .progress-container {
+    transform: translateY(80px);
+    opacity: 0;
+    pointer-events: none;
+    transition-delay: 0s;
 }
 
 .progress-container:hover {
@@ -457,9 +514,17 @@ body {
     cursor: pointer;
     font-weight: bold;
     z-index: 10;
-    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     transform-origin: 50% calc(100% + 15px);
     contain: layout style;
+    opacity: 1;
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) 2.0s, opacity 0.4s ease 2.0s;
+}
+
+body.is-front-cover .progress-bookmark {
+    opacity: 0;
+    transform: translate(-50%, 20px) scale(0.5);
+    pointer-events: none;
+    transition-delay: 0s;
 }
 
 .bookmark-hitbox {
@@ -620,5 +685,18 @@ body.disable-animation .progress-bookmark {
 }
 
 body.disable-animation .progress-fill {
+    transition: none !important;
+}
+
+body.disable-animation .cover-page {
+    transition: none !important;
+}
+
+body.disable-animation .book {
+    transition: none !important;
+}
+
+body.disable-animation .controls-container,
+body.disable-animation .progress-container {
     transition: none !important;
 }
