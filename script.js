@@ -630,6 +630,7 @@ function updateBookState() {
     const toFlip = [];
     const toUnflip = [];
 
+    // Front cover logic
     let shouldFlipFront = (-1 < curr);
     let frontTarget = pageTargetState.has('cover-front') ? pageTargetState.get('cover-front') : false;
     if (shouldFlipFront !== frontTarget) {
@@ -682,7 +683,10 @@ function updateBookState() {
 
     toFlip.forEach(i => {
         const order = orderScore(i);
-        const zIndexDuring = 1000 + order;
+        // [FIX] 프론트 커버가 뒤로 넘어갈 때(index 0) z-index 점프 최소화
+        // 커버의 resting z-index가 0이고 page-0가 65이므로, 
+        // 애니메이션 중에도 60 정도로 유지하면 컨텐츠 페이지 뒤로 자연스럽게 들어갑니다.
+        const zIndexDuring = (i === 'cover-front' && curr === 0) ? 60 : 1000 + order;
         applyPageFlip(i, true, baseDelay, zIndexDuring, duration);
         baseDelay += staggerDelay;
     });
@@ -705,7 +709,7 @@ function updateBookState() {
         }
     }
 
-    if (dom.leftStatic) dom.leftStatic.style.opacity = '0';
+    if (dom.leftStatic) dom.leftStatic.style.display = 'none';
     clearTimeout(leftStaticTimer);
     const showDelay = totalFlips === 0 ? 0 : baseDelay + duration + 80;
     leftStaticTimer = setTimeout(updateLeftStatic, showDelay);
@@ -716,20 +720,31 @@ function updateBookState() {
 
 function updateLeftStatic() {
     if (!dom.leftStatic) return;
-    if (state.currentPageIndex === 0) {
-        dom.leftStatic.style.opacity = '0';
+
+    // [FIX] 첫 페이지(0)나 커버(-1) 상태에서는 오버레이 절대 금지 (깜빡임 방지)
+    if (state.currentPageIndex <= 0) {
+        dom.leftStatic.style.display = 'none';
+        dom.leftStaticImg.src = '';
         return;
     }
+
     const imgIdx = (state.currentPageIndex - 1) * 2 + 1;
+    if (imgIdx < 0) {
+        dom.leftStatic.style.display = 'none';
+        return;
+    }
+
     const path = getImagePath(imgIdx);
     const cached = imageCache.get(path);
 
     if (cached) {
         dom.leftStaticImg.src = cached.src;
-        dom.leftStatic.style.opacity = '1';
+        dom.leftStatic.style.display = 'block';
     } else {
         dom.leftStaticImg.onload = () => {
-            dom.leftStatic.style.opacity = '1';
+            if (state.currentPageIndex > 0) {
+                dom.leftStatic.style.display = 'block';
+            }
             dom.leftStaticImg.onload = null;
         };
         dom.leftStaticImg.src = path;
@@ -769,7 +784,6 @@ function rebuildBookFlippedState() {
         }
     });
 
-    if (dom.leftStatic) dom.leftStatic.style.opacity = '0';
     updateLeftStatic();
     updateCenterAlign();
 }
