@@ -28,6 +28,13 @@
     font-style: normal;
 }
 
+@font-face {
+    font-family: 'OngleipKonkon';
+    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/2412-1@1.0/Ownglyph_corncorn-Rg.woff2') format('woff2');
+    font-weight: normal;
+    font-display: swap;
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -68,6 +75,8 @@ body {
     position: relative;
     touch-action: none;
     isolation: isolate;
+    z-index: 10;
+    pointer-events: none;
 }
 
 /* =========================================================================
@@ -82,6 +91,7 @@ body {
     cursor: pointer;
     contain: layout;
     transition: transform 1.2s cubic-bezier(0.15, 0.95, 0.2, 1);
+    pointer-events: auto;
 }
 
 .book.closed-front {
@@ -621,11 +631,16 @@ body.disable-animation .progress-container {
 /* =========================================================================
    Interactive Background Images
    ========================================================================= */
+#interactive-container {
+    display: contents;
+    pointer-events: none;
+}
+
 .interactive-img-frame {
     position: fixed;
-    z-index: 0;
+    z-index: 5;
     pointer-events: auto;
-    width: 220px;
+    width: 250px;
     transition:
         transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275),
         top 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275),
@@ -636,7 +651,7 @@ body.disable-animation .progress-container {
     cursor: pointer;
 
     background: #fff;
-    padding: 10px 10px 36px 10px;
+    padding: 10px 10px 50px 10px;
     box-shadow:
         0 6px 20px rgba(0, 0, 0, 0.22),
         0 2px 6px rgba(0, 0, 0, 0.12);
@@ -645,14 +660,27 @@ body.disable-animation .progress-container {
 
 .interactive-img-frame.is-expanded {
     z-index: 2000;
-    opacity: 1 !important;
     pointer-events: auto !important;
 }
 
-body.is-front-cover .interactive-img-frame {
-    opacity: 0;
+.author-tag {
+    position: absolute;
+    bottom: 8px;
+    left: 12px;
+    right: 12px;
+    font-size: 24px;
+    color: #2e2e2e;
+    text-align: right;
+    font-family: 'OngleipKonkon';
+    letter-spacing: -0.01em;
+    opacity: 0.8;
+}
+
+body.is-front-cover .interactive-img-frame,
+.interactive-img-frame.is-hidden {
+    transform: translate(calc(var(--base-tx) * 5), calc(var(--base-ty) * 5)) rotate(calc(var(--base-rot) * 2)) scale(0.5) !important;
     pointer-events: none;
-    transition: none !important;
+    transition: transform 0.6s cubic-bezier(0.15, 0.95, 0.2, 1) 0s !important;
     animation: none !important;
 }
 
@@ -679,7 +707,7 @@ body.is-front-cover .interactive-img-frame {
 }
 
 .interactive-img-frame.pos-top-right:hover {
-    transform: translate(5%, -5%) rotate(1deg) scale(1.1);
+    transform: translate(5%, -5%) rotate(3deg) scale(1.1);
 }
 
 .interactive-img-frame.pos-top-right.is-expanded,
@@ -692,7 +720,7 @@ body.is-front-cover .interactive-img-frame {
 .interactive-img-frame.pos-top-left {
     --base-tx: -15%;
     --base-ty: -15%;
-    --base-rot: 18deg;
+    --base-rot: 5deg;
     top: 0;
     left: 0;
     transform: translate(var(--base-tx), var(--base-ty)) rotate(var(--base-rot));
@@ -700,7 +728,7 @@ body.is-front-cover .interactive-img-frame {
 }
 
 .interactive-img-frame.pos-top-left:hover {
-    transform: translate(-5%, -5%) rotate(12deg) scale(1.1);
+    transform: translate(-5%, -5%) rotate(-2deg) scale(1.1);
 }
 
 .interactive-img-frame.pos-top-left.is-expanded,
@@ -721,7 +749,7 @@ body.is-front-cover .interactive-img-frame {
 }
 
 .interactive-img-frame.pos-bottom-left:hover {
-    transform: translate(-5%, 5%) rotate(5deg) scale(1.1);
+    transform: translate(-5%, 5%) rotate(2deg) scale(1.1);
 }
 
 .interactive-img-frame.pos-bottom-left.is-expanded,
@@ -730,13 +758,54 @@ body.is-front-cover .interactive-img-frame {
     z-index: 2000;
 }
 
+/* 우하단 (Bottom-Right) */
+.interactive-img-frame.pos-bottom-right {
+    --base-tx: 1%;
+    --base-ty: -7%;
+    --base-rot: -4deg;
+    bottom: 0;
+    right: 0;
+    transform: translate(var(--base-tx), var(--base-ty)) rotate(var(--base-rot));
+    animation: interactive-entrance 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) 3.0s backwards;
+}
+
+.interactive-img-frame.pos-bottom-right:hover {
+    transform: translate(5%, 5%) rotate(-2deg) scale(1.1);
+}
+
+.interactive-img-frame.pos-bottom-right.is-expanded,
+.interactive-img-frame.pos-bottom-right.is-expanded:hover {
+    transform: translate(-25%, -25%) rotate(-2deg) scale(1.4);
+    z-index: 2000;
+}
+
+/* 좌중단 (Middle-Left) */
+.interactive-img-frame.pos-middle-left {
+    --base-tx: -25%;
+    --base-ty: 0%;
+    --base-rot: 8deg;
+    top: 45%;
+    left: 0;
+    transform: translate(var(--base-tx), var(--base-ty)) rotate(var(--base-rot));
+    animation: interactive-entrance 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) 3.0s backwards;
+}
+
+.interactive-img-frame.pos-middle-left:hover {
+    transform: translate(-5%, 0%) rotate(4deg) scale(1.1);
+}
+
+.interactive-img-frame.pos-middle-left.is-expanded,
+.interactive-img-frame.pos-middle-left.is-expanded:hover {
+    transform: translate(25%, 0%) rotate(4deg) scale(1.4);
+    z-index: 2000;
+}
+
 @keyframes interactive-entrance {
     from {
-        opacity: 0;
-        transform: translate(calc(var(--base-tx) * 2), calc(var(--base-ty) * 2)) rotate(calc(var(--base-rot) * 1.5)) scale(0.8);
+        transform: translate(calc(var(--base-tx) * 5), calc(var(--base-ty) * 5)) rotate(calc(var(--base-rot) * 2)) scale(0.5);
     }
+
     to {
-        opacity: 1;
         transform: translate(var(--base-tx), var(--base-ty)) rotate(var(--base-rot)) scale(1);
     }
 }

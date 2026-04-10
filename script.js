@@ -39,7 +39,9 @@ const state = {
     startX: 0,
     startTime: 0,
     isDraggingProgressBar: false,
-    isAnimationEnabled: true
+    isAnimationEnabled: true,
+    interactiveData: null,
+    isInteractiveInitialized: false // 인터랙티브 이미지 최초 등장 여부
 };
 
 const dom = {
@@ -86,6 +88,7 @@ function init() {
     initProgressBar();
     createSideControlPanel();
     initInteractiveFrames();
+    loadInteractiveData();
 
     window.addEventListener('keydown', (e) => {
         if (e.key === 'ArrowRight') {
@@ -388,27 +391,128 @@ function createSideControlPanel() {
     });
 }
 
-function initInteractiveFrames() {
-    console.log('initInteractiveFrames');
-    const frames = document.querySelectorAll('.interactive-img-frame');
-    frames.forEach(frame => {
+// 위치 번호 매핑 (1:좌상, 2:우상, 3:좌중, 4:좌하, 5:우하)
+const InteractivePositionMap = {
+    '1': 'pos-top-left',
+    '2': 'pos-top-right',
+    '3': 'pos-middle-left',
+    '4': 'pos-bottom-left',
+    '5': 'pos-bottom-right'
+};
+
+async function loadInteractiveData() {
+    console.log('loadInteractiveData');
+    try {
+        const response = await fetch('data/interactive_metadata.csv');
+        const text = await response.text();
+        const lines = text.trim().split('\n');
+        const data = [];
+
+        // 헤더를 제외한 데이터 파싱 (filename, author, start_page, position_number)
+        for (let i = 1; i < lines.length; i++) {
+            const cols = lines[i].split(',');
+            if (cols.length >= 4) {
+                data.push({
+                    id: i, // 고유 식별자 추가
+                    filename: cols[0].trim(),
+                    author: cols[1].trim(),
+                    start_page: parseInt(cols[2].trim(), 10),
+                    position: cols[3].trim()
+                });
+            }
+        }
+        state.interactiveData = data;
+        renderInteractiveFrames(data); // 모든 데이터 한꺼번에 렌더링
+        updateInteractiveBackgrounds(state.currentPageIndex);
+    } catch (e) {
+        console.error('Failed to load interactive metadata', e);
+    }
+}
+
+function updateInteractiveBackgrounds(pageIndex) {
+    if (!state.interactiveData) return;
+
+    const actualPageNumber = pageIndex * 2;
+
+    // 현재 페이지보다 작거나 같은 start_page값들 중 최댓값(현재 세트의 기준점) 찾기
+    const validPages = state.interactiveData
+        .map(d => d.start_page)
+        .filter(sp => sp <= actualPageNumber);
+    
+    if (validPages.length === 0) return;
+    const maxStartPage = Math.max(...validPages);
+
+    // 해당 maxStartPage와 정확히 일치하는 세트만 활성화
+    const activeIds = new Set(
+        state.interactiveData
+            .filter(d => d.start_page === maxStartPage)
+            .map(d => d.id)
+    );
+
+    const container = document.getElementById('interactive-container');
+    if (!container) return;
+
+    // 초기화 상태 체크: 표지가 열려 있는 상태에서 이미지가 소환되는 경우만 3초 지연 적용
+    const isFirstTime = !state.isInteractiveInitialized && !document.body.classList.contains('is-front-cover');
+
+    Array.from(container.children).forEach(frame => {
+        const frameId = parseInt(frame.dataset.id, 10);
+        if (activeIds.has(frameId)) {
+            // 등장할 때: 첫 소환이면 3초 지연, 이후 페이지 이동 시에는 즉시(0s) 등장
+            if (frame.classList.contains('is-hidden')) {
+                frame.style.animationDelay = isFirstTime ? '3.0s' : '0s';
+                frame.classList.remove('is-hidden');
+            }
+        } else {
+            // 퇴장할 때: 즉시 sinking
+            frame.classList.add('is-hidden');
+        }
+    });
+
+    if (activeIds.size > 0 && isFirstTime) {
+        state.isInteractiveInitialized = true;
+    }
+}
+
+function renderInteractiveFrames(dataList) {
+    const container = document.getElementById('interactive-container');
+    if (!container) return;
+
+    // 전체 리스트를 순회하며 모든 프레임 생성
+    container.innerHTML = '';
+    dataList.forEach(data => {
+        const className = InteractivePositionMap[data.position] || 'pos-top-right';
+        const frame = document.createElement('div');
+        frame.className = `interactive-img-frame ${className} is-hidden`; // 초기값 숨김
+        frame.dataset.id = data.id;
+        frame.dataset.filename = data.filename;
+        frame.dataset.author = data.author;
+
+        const img = document.createElement('img');
+        img.src = `images/interactive/${data.filename}`;
+        img.alt = 'Background Illustration';
+        frame.appendChild(img);
+
+        const authorTag = document.createElement('div');
+        authorTag.className = 'author-tag';
+        authorTag.textContent = data.author;
+        frame.appendChild(authorTag);
+
         frame.addEventListener('click', (e) => {
             e.stopPropagation();
             const wasExpanded = frame.classList.contains('is-expanded');
-            
-            // 다른 모든 프레임 닫기
-            frames.forEach(f => f.classList.remove('is-expanded'));
-            
-            // 토글 처리
-            if (!wasExpanded) {
-                frame.classList.add('is-expanded');
-            }
+            document.querySelectorAll('.interactive-img-frame').forEach(f => f.classList.remove('is-expanded'));
+            if (!wasExpanded) frame.classList.add('is-expanded');
         });
-    });
 
-    // 배경 클릭 시 닫기
+        container.appendChild(frame);
+    });
+}
+
+function initInteractiveFrames() {
+    // 배경 클릭 시 모든 확대된 프레임 닫기 로직 유지
     window.addEventListener('click', () => {
-        frames.forEach(f => f.classList.remove('is-expanded'));
+        document.querySelectorAll('.interactive-img-frame').forEach(f => f.classList.remove('is-expanded'));
     });
 }
 
@@ -590,6 +694,7 @@ function flipToPage(index) {
     state.currentPageIndex = clamped;
     updateBookState();
     updateCenterAlign();
+    updateInteractiveBackgrounds(clamped);
 }
 
 function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
