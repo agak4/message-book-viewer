@@ -640,7 +640,7 @@ body.disable-animation .progress-container {
     position: fixed;
     z-index: 5;
     pointer-events: auto;
-    width: 250px;
+    width: 210px;
     transition:
         transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275),
         top 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275),
@@ -737,45 +737,25 @@ body.is-front-cover .interactive-img-frame,
     z-index: 2000;
 }
 
-/* 좌하단 (Bottom-Left) */
-.interactive-img-frame.pos-bottom-left {
-    --base-tx: -15%;
-    --base-ty: 15%;
-    --base-rot: 10deg;
-    bottom: 0;
-    left: 0;
-    transform: translate(var(--base-tx), var(--base-ty)) rotate(var(--base-rot));
-    animation: interactive-entrance 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) 3.0s backwards;
-}
-
-.interactive-img-frame.pos-bottom-left:hover {
-    transform: translate(-5%, 5%) rotate(2deg) scale(1.1);
-}
-
-.interactive-img-frame.pos-bottom-left.is-expanded,
-.interactive-img-frame.pos-bottom-left.is-expanded:hover {
-    transform: translate(25%, -25%) rotate(2deg) scale(1.4);
-    z-index: 2000;
-}
 
 /* 우하단 (Bottom-Right) */
 .interactive-img-frame.pos-bottom-right {
-    --base-tx: 1%;
-    --base-ty: -7%;
-    --base-rot: -4deg;
+    --base-tx: 66%;
+    --base-ty: -6%;
+    --base-rot: 5deg;
     bottom: 0;
-    right: 0;
+    right: 120px;
     transform: translate(var(--base-tx), var(--base-ty)) rotate(var(--base-rot));
     animation: interactive-entrance 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) 3.0s backwards;
 }
 
 .interactive-img-frame.pos-bottom-right:hover {
-    transform: translate(5%, 5%) rotate(-2deg) scale(1.1);
+    transform: translate(50%, -10%) rotate(2deg) scale(1.1);
 }
 
 .interactive-img-frame.pos-bottom-right.is-expanded,
 .interactive-img-frame.pos-bottom-right.is-expanded:hover {
-    transform: translate(-25%, -25%) rotate(-2deg) scale(1.4);
+    transform: translate(25%, -25%) rotate(2deg) scale(1.4);
     z-index: 2000;
 }
 

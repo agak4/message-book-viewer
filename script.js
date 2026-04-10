@@ -391,13 +391,12 @@ function createSideControlPanel() {
     });
 }
 
-// 위치 번호 매핑 (1:좌상, 2:우상, 3:좌중, 4:좌하, 5:우하)
+// 위치 번호 매핑 (1:좌상, 2:우상, 3:좌중, 4:우하)
 const InteractivePositionMap = {
     '1': 'pos-top-left',
     '2': 'pos-top-right',
     '3': 'pos-middle-left',
-    '4': 'pos-bottom-left',
-    '5': 'pos-bottom-right'
+    '4': 'pos-bottom-right'
 };
 
 async function loadInteractiveData() {
@@ -438,7 +437,7 @@ function updateInteractiveBackgrounds(pageIndex) {
     const validPages = state.interactiveData
         .map(d => d.start_page)
         .filter(sp => sp <= actualPageNumber);
-    
+
     if (validPages.length === 0) return;
     const maxStartPage = Math.max(...validPages);
 
