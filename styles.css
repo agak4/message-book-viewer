@@ -415,14 +415,16 @@ body.is-front-cover .progress-container {
     transform-origin: bottom center;
     contain: layout;
     opacity: 1;
-    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.5s ease 2.5s;
+    transition: transform 0.2s cubic-bezier(0.2, 0, 0.2, 1), opacity 0.3s ease;
+    animation: bookmark-pop-in 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) 2.5s backwards;
 }
 
 body.is-front-cover .progress-bookmark {
     opacity: 0;
-    transform: translate(-50%, 20px) scale(0.5);
+    transform: translate(-50%, 60px) scale(0.5);
     pointer-events: none;
     transition-delay: 0s;
+    animation: none;
 }
 
 .bookmark-hitbox {
@@ -479,6 +481,18 @@ body.is-front-cover .progress-bookmark {
 .progress-bookmark:nth-child(even):hover {
     transform: translateX(-50%) scale(1.15) translateY(-5px);
     z-index: 25;
+}
+
+@keyframes bookmark-pop-in {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(40px) scale(0.5);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1);
+    }
 }
 
 .side-control-panel {
@@ -612,8 +626,14 @@ body.disable-animation .progress-container {
     z-index: 0;
     pointer-events: auto;
     width: 220px;
-    aspect-ratio: 3 / 4;
-    transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transition:
+        transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+        top 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+        left 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+        right 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+        bottom 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+        box-shadow 0.3s ease;
+    cursor: pointer;
 
     background: #fff;
     padding: 10px 10px 36px 10px;
@@ -621,6 +641,10 @@ body.disable-animation .progress-container {
         0 6px 20px rgba(0, 0, 0, 0.22),
         0 2px 6px rgba(0, 0, 0, 0.12);
     border-radius: 2px;
+}
+
+.interactive-img-frame.is-expanded {
+    z-index: 2000;
 }
 
 .interactive-img-frame img {
@@ -634,37 +658,55 @@ body.disable-animation .progress-container {
     color: transparent;
 }
 
-/* 우상단 */
+/* 우상단 (Top-Right) */
 .interactive-img-frame.pos-top-right {
-    top: -44px;
-    right: -33px;
-    transform: rotate(6deg);
+    top: 0;
+    right: 0;
+    transform: translate(15%, -15%) rotate(6deg);
 }
 
 .interactive-img-frame.pos-top-right:hover {
-    transform: rotate(1deg) scale(1.1);
+    transform: translate(5%, -5%) rotate(1deg) scale(1.1);
 }
 
-/* 좌상단 */
+.interactive-img-frame.pos-top-right.is-expanded,
+.interactive-img-frame.pos-top-right.is-expanded:hover {
+    transform: translate(-25%, 25%) rotate(3deg) scale(1.4);
+    z-index: 2000;
+}
+
+/* 좌상단 (Top-Left) */
 .interactive-img-frame.pos-top-left {
-    top: -61px;
-    left: -50px;
-    transform: rotate(21deg);
+    top: 0;
+    left: 0;
+    transform: translate(-15%, -15%) rotate(18deg);
 }
 
 .interactive-img-frame.pos-top-left:hover {
-    transform: rotate(16deg) scale(1.1);
+    transform: translate(-5%, -5%) rotate(12deg) scale(1.1);
 }
 
-/* 좌하단 */
+.interactive-img-frame.pos-top-left.is-expanded,
+.interactive-img-frame.pos-top-left.is-expanded:hover {
+    transform: translate(25%, 25%) rotate(-2deg) scale(1.4);
+    z-index: 2000;
+}
+
+/* 좌하단 (Bottom-Left) */
 .interactive-img-frame.pos-bottom-left {
-    bottom: 117px;
-    left: -53px;
-    transform: rotate(13deg);
+    bottom: 0;
+    left: 0;
+    transform: translate(-15%, 15%) rotate(10deg);
 }
 
 .interactive-img-frame.pos-bottom-left:hover {
-    transform: rotate(8deg) scale(1.1);
+    transform: translate(-5%, 5%) rotate(5deg) scale(1.1);
+}
+
+.interactive-img-frame.pos-bottom-left.is-expanded,
+.interactive-img-frame.pos-bottom-left.is-expanded:hover {
+    transform: translate(25%, -25%) rotate(2deg) scale(1.4);
+    z-index: 2000;
 }
 
 /* =========================================================================
@@ -680,7 +722,7 @@ body.disable-animation .progress-container {
     width: 50%;
     height: 100%;
     background: transparent;
-    /* box-shadow: 0 0 5px rgba(40, 40, 40, 0.7); */
+    box-shadow: 0 0 5px rgba(40, 40, 40, 0.7);
     pointer-events: none;
     z-index: -1;
     transition: opacity 2s ease-out;

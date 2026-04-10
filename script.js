@@ -85,6 +85,7 @@ function init() {
     renderBookmarks();
     initProgressBar();
     createSideControlPanel();
+    initInteractiveFrames();
 
     window.addEventListener('keydown', (e) => {
         if (e.key === 'ArrowRight') {
@@ -384,6 +385,30 @@ function createSideControlPanel() {
     nextBtn.addEventListener('click', () => {
         if (isMobile()) navigateMobile(state.mobileImageIndex + 1);
         else flipToPage(state.currentPageIndex + 1);
+    });
+}
+
+function initInteractiveFrames() {
+    console.log('initInteractiveFrames');
+    const frames = document.querySelectorAll('.interactive-img-frame');
+    frames.forEach(frame => {
+        frame.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const wasExpanded = frame.classList.contains('is-expanded');
+            
+            // 다른 모든 프레임 닫기
+            frames.forEach(f => f.classList.remove('is-expanded'));
+            
+            // 토글 처리
+            if (!wasExpanded) {
+                frame.classList.add('is-expanded');
+            }
+        });
+    });
+
+    // 배경 클릭 시 닫기
+    window.addEventListener('click', () => {
+        frames.forEach(f => f.classList.remove('is-expanded'));
     });
 }
 
