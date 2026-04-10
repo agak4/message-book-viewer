@@ -658,6 +658,11 @@ body.disable-animation .progress-container {
     border-radius: 2px;
 }
 
+.interactive-img-frame.is-landscape {
+    width: 280px;
+    max-width: 360px;
+}
+
 .interactive-img-frame.is-expanded {
     z-index: 2000;
     pointer-events: auto !important;

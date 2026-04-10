@@ -490,6 +490,11 @@ function renderInteractiveFrames(dataList) {
         const img = document.createElement('img');
         img.src = `images/interactive/${data.filename}`;
         img.alt = 'Background Illustration';
+        img.onload = () => {
+            if (img.naturalWidth > img.naturalHeight) {
+                frame.classList.add('is-landscape');
+            }
+        };
         frame.appendChild(img);
 
         const authorTag = document.createElement('div');
