@@ -31,8 +31,8 @@ const PRELOAD_CONCURRENCY = 4;
 const MOBILE_BREAKPOINT = 768;
 
 const state = {
-    currentPageIndex: -1,
-    prevPageIndex: -1,
+    currentPageIndex: 0,
+    prevPageIndex: 0,
     totalPages: Math.ceil((AppParams.totalImages + 1) / 2),
     mobileImageIndex: 0,
     isDragging: false,
@@ -186,30 +186,35 @@ function renderBook() {
     pathToImgElements.clear();
     const fragment = document.createDocumentFragment();
 
-    const frontCover = document.createElement('div');
-    frontCover.className = 'cover-page cover-front';
-    frontCover.id = 'page-cover-front';
-    const fcFront = document.createElement('div');
-    fcFront.className = 'cover-face front';
-    const fcBack = document.createElement('div');
-    fcBack.className = 'cover-face back';
-    frontCover.appendChild(fcFront);
-    frontCover.appendChild(fcBack);
-    frontCover.style.zIndex = state.totalPages + 2;
-    fragment.appendChild(frontCover);
-
+    // cover-page 없이 page-0의 front face(photo000)가 표지 역할을 담당
     for (let i = 0; i < state.totalPages; i++) {
         const page = document.createElement('div');
         page.className = 'page';
         page.id = `page-${i}`;
 
-        const fi = i === 0 ? 0 : i * 2;
-        const bi = i === 0 ? 1 : i * 2 + 1;
+        const fi = i * 2;
+        const bi = i * 2 + 1;
         const fpPath = getImagePath(fi);
         const bpPath = getImagePath(bi);
 
         const frontFace = document.createElement('div');
         frontFace.className = 'page-face front';
+
+        // 표지 전용 그림자 추가 (0번 페이지의 앞면)
+        if (i === 0) {
+            const coverShadow = document.createElement('div');
+            coverShadow.className = 'cover_shadow side';
+            const border = document.createElement('div');
+            border.className = 'normal_left_border';
+            coverShadow.appendChild(border);
+            frontFace.appendChild(coverShadow);
+        }
+
+        // 가운데 그림자 추가 (오른쪽 페이지용)
+        const rightShadow = document.createElement('div');
+        rightShadow.className = 'midShadow rightShadow';
+        frontFace.appendChild(rightShadow);
+
         const frontImg = document.createElement('img');
         frontImg.alt = `Page ${fi}`;
         const fCached = imageCache.get(fpPath);
@@ -223,6 +228,12 @@ function renderBook() {
 
         const backFace = document.createElement('div');
         backFace.className = 'page-face back';
+
+        // 가운데 그림자 추가 (왼쪽 페이지용)
+        const leftShadow = document.createElement('div');
+        leftShadow.className = 'midShadow leftShadow';
+        backFace.appendChild(leftShadow);
+
         const backImg = document.createElement('img');
         backImg.alt = `Page ${bi}`;
         const bCached = imageCache.get(bpPath);
@@ -240,23 +251,17 @@ function renderBook() {
         fragment.appendChild(page);
     }
 
-    const backCover = document.createElement('div');
-    backCover.className = 'cover-page cover-back';
-    backCover.id = 'page-cover-back';
-    const bcFront = document.createElement('div');
-    bcFront.className = 'cover-face front';
-    const bcBack = document.createElement('div');
-    bcBack.className = 'cover-face back';
-    backCover.appendChild(bcFront);
-    backCover.appendChild(bcBack);
-    backCover.style.zIndex = 0;
-    fragment.appendChild(backCover);
-
     dom.book.innerHTML = '';
     dom.book.appendChild(fragment);
 
     const ls = document.createElement('div');
     ls.id = 'left-static';
+
+    // 왼쪽 정적 페이지 가운데 그림자 추가
+    const leftShadow = document.createElement('div');
+    leftShadow.className = 'midShadow leftShadow';
+    ls.appendChild(leftShadow);
+
     const lsImg = document.createElement('img');
     lsImg.alt = '';
     ls.appendChild(lsImg);
@@ -442,9 +447,9 @@ function initDrag() {
                 else flipToPage(state.currentPageIndex - 1);
             } else if (Math.abs(diffX) < 10 && timeElapsed < 400) {
                 if (e.target.closest('.book')) {
-                    if (state.currentPageIndex === -1) {
+                    if (state.currentPageIndex === 0) {
                         flipToPage(state.currentPageIndex + 1);
-                    } else if (state.currentPageIndex === state.totalPages + 1) {
+                    } else if (state.currentPageIndex === state.totalPages) {
                         flipToPage(state.currentPageIndex - 1);
                     } else {
                         if (endX > window.innerWidth / 2) flipToPage(state.currentPageIndex + 1);
@@ -529,19 +534,18 @@ function initProgressBar() {
 }
 
 function getRestingZIndex(id, flipped) {
-    if (id === 'cover-front') return flipped ? 0 : state.totalPages + 2;
-    if (id === 'cover-back') return flipped ? state.totalPages + 2 : 0;
     const i = parseInt(id, 10);
     return flipped ? i + 1 : state.totalPages - i + 1;
 }
 
 function updateCenterAlign() {
     console.log('updateCenterAlign', state.currentPageIndex);
-    if (state.currentPageIndex === -1) {
+    if (state.currentPageIndex === 0) {
+        // 표지(photo000) 상태: 책을 왼쪽으로 이동, UI 숨김
         dom.book.classList.add('closed-front');
         dom.book.classList.remove('closed-back');
         document.body.classList.add('is-front-cover');
-    } else if (state.currentPageIndex === state.totalPages + 1) {
+    } else if (state.currentPageIndex === state.totalPages) {
         dom.book.classList.add('closed-back');
         dom.book.classList.remove('closed-front');
         document.body.classList.remove('is-front-cover');
@@ -553,16 +557,7 @@ function updateCenterAlign() {
 
 function flipToPage(index) {
     console.log('flipToPage', index);
-    let clamped = Math.max(-1, Math.min(index, state.totalPages + 1));
-
-    const isLastImageRight = ((AppParams.totalImages - 1) % 2 === 0);
-    if (isLastImageRight && clamped === state.totalPages) {
-        if (state.currentPageIndex < clamped) {
-            clamped = state.totalPages + 1;
-        } else if (state.currentPageIndex > clamped) {
-            clamped = state.totalPages - 1;
-        }
-    }
+    const clamped = Math.max(0, Math.min(index, state.totalPages));
 
     if (clamped === state.currentPageIndex) return;
 
@@ -649,14 +644,6 @@ function updateBookState() {
     const toFlip = [];
     const toUnflip = [];
 
-    // Front cover logic
-    let shouldFlipFront = (-1 < curr);
-    let frontTarget = pageTargetState.has('cover-front') ? pageTargetState.get('cover-front') : false;
-    if (shouldFlipFront !== frontTarget) {
-        pageTargetState.set('cover-front', shouldFlipFront);
-        if (shouldFlipFront) toFlip.push('cover-front'); else toUnflip.push('cover-front');
-    }
-
     for (let i = 0; i < state.totalPages; i++) {
         const shouldBeFlipped = i < curr;
         const currentTarget = pageTargetState.has(i) ? pageTargetState.get(i) : false;
@@ -668,19 +655,7 @@ function updateBookState() {
         }
     }
 
-    // Back cover logic
-    let shouldFlipBack = (state.totalPages < curr);
-    let backTarget = pageTargetState.has('cover-back') ? pageTargetState.get('cover-back') : false;
-    if (shouldFlipBack !== backTarget) {
-        pageTargetState.set('cover-back', shouldFlipBack);
-        if (shouldFlipBack) toFlip.push('cover-back'); else toUnflip.push('cover-back');
-    }
-
-    const orderScore = (val) => {
-        if (val === 'cover-front') return -1;
-        if (val === 'cover-back') return state.totalPages;
-        return val;
-    };
+    const orderScore = (val) => val;
 
     toFlip.sort((a, b) => orderScore(a) - orderScore(b));
     toUnflip.sort((a, b) => orderScore(b) - orderScore(a));
@@ -697,6 +672,9 @@ function updateBookState() {
         staggerDelay = (1000 - duration) / (totalFlips - 1);
         if (staggerDelay < 5) staggerDelay = 5;
     }
+
+    // 책 전체 이동 속도 동기화
+    if (dom.book) dom.book.style.transitionDuration = `${duration}ms`;
 
     let baseDelay = 0;
 
@@ -768,18 +746,14 @@ function updateLeftStatic() {
 
 function rebuildBookFlippedState() {
     console.log('rebuildBookFlippedState');
-    const list = ['cover-front'];
+    const list = [];
     for (let i = 0; i < state.totalPages; i++) list.push(i);
-    list.push('cover-back');
 
     list.forEach(i => {
         const p = document.getElementById(`page-${i}`);
         if (!p) return;
 
-        let shouldBeFlipped;
-        if (i === 'cover-front') shouldBeFlipped = (-1 < state.currentPageIndex);
-        else if (i === 'cover-back') shouldBeFlipped = (state.totalPages < state.currentPageIndex);
-        else shouldBeFlipped = (i < state.currentPageIndex);
+        const shouldBeFlipped = i < state.currentPageIndex;
 
         if (shouldBeFlipped) {
             p.classList.add('flipped');
@@ -890,13 +864,13 @@ function schedulePriority() {
 
     for (let i = Math.max(0, centerSpread - EAGER_RADIUS);
         i <= Math.min(state.totalPages - 1, centerSpread + EAGER_RADIUS); i++) {
-        enqueue(getImagePath(i === 0 ? 0 : i * 2), true);
-        enqueue(getImagePath(i === 0 ? 1 : i * 2 + 1), true);
+        enqueue(getImagePath(i * 2), true);
+        enqueue(getImagePath(i * 2 + 1), true);
     }
     for (let i = 0; i < state.totalPages; i++) {
         if (Math.abs(i - centerSpread) <= EAGER_RADIUS) continue;
-        enqueue(getImagePath(i === 0 ? 0 : i * 2));
-        enqueue(getImagePath(i === 0 ? 1 : i * 2 + 1));
+        enqueue(getImagePath(i * 2));
+        enqueue(getImagePath(i * 2 + 1));
     }
 }
 

@@ -92,79 +92,6 @@ body {
     transform: translateX(25%);
 }
 
-.cover-page {
-    position: absolute;
-    top: -2.5%;
-    bottom: -2.5%;
-    left: 50%;
-    width: 52.5%;
-    transform-origin: left center;
-    transform-style: preserve-3d;
-    cursor: pointer;
-    contain: layout style;
-    transition: transform 1.2s cubic-bezier(0.15, 0.95, 0.2, 1);
-    will-change: auto;
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-}
-
-.cover-page.flipped {
-    transform: rotateY(-180deg);
-}
-
-.cover-page.flipping {
-    z-index: 2000 !important;
-}
-
-.cover-face {
-    position: absolute;
-    inset: -1px;
-    background-color: var(--color-book-cover);
-    background-image:
-        url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.6' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E"),
-        linear-gradient(to right, rgba(0, 0, 0, 0.2) 0%, transparent 2%, transparent 98%, rgba(0, 0, 0, 0.2) 100%);
-    background-blend-mode: overlay, multiply;
-    box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.5);
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-}
-
-.cover-face.front {
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 40px rgba(0, 0, 0, 0.5);
-    border-radius: 0 12px 12px 0;
-}
-
-.cover-face.back {
-    transform: rotateY(180deg);
-    border-radius: 12px 0 0 12px;
-}
-
-.cover-face::after {
-    content: '';
-    position: absolute;
-    top: 1.5%;
-    bottom: 1.5%;
-    left: 3%;
-    right: 3%;
-    border: 2px dashed rgba(255, 255, 255, 0.12);
-    border-radius: 10px;
-    box-shadow: 0 0 2px rgba(0, 0, 0, 0.5), 0 0 1px rgba(255, 255, 255, 0.1);
-    pointer-events: none;
-}
-
-#page-cover-front .cover-face.back::after {
-    right: 0;
-    border-right: none;
-    border-radius: 10px 0 0 10px;
-}
-
-#page-cover-back .cover-face.front::after {
-    left: 0;
-    border-left: none;
-    border-radius: 0 10px 10px 0;
-}
-
-
 
 .page {
     position: absolute;
@@ -211,31 +138,8 @@ body {
     transform: rotateY(180deg);
 }
 
-.page-face.front::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(to right,
-            rgba(0, 0, 0, 0.4) 0%,
-            rgba(0, 0, 0, 0.1) 4%,
-            rgba(0, 0, 0, 0) 12%);
-    pointer-events: none;
-    z-index: 2;
-}
-
-.page-face.back::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(to left,
-            rgba(0, 0, 0, 0.4) 0%,
-            rgba(0, 0, 0, 0.1) 4%,
-            rgba(0, 0, 0, 0) 12%);
-    pointer-events: none;
-    z-index: 2;
-}
-
-.page-face img {
+.page-face.front img,
+.page-face.back img {
     width: 100%;
     height: 100%;
     object-fit: contain;
@@ -258,16 +162,12 @@ body {
     contain: layout style paint;
 }
 
-#left-static::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(to left,
-            rgba(0, 0, 0, 0.4) 0%,
-            rgba(0, 0, 0, 0.1) 4%,
-            rgba(0, 0, 0, 0) 12%);
-    pointer-events: none;
-    z-index: 2;
+#left-static img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    color: transparent;
 }
 
 #left-static img {
@@ -765,4 +665,99 @@ body.disable-animation .progress-container {
 
 .interactive-img-frame.pos-bottom-left:hover {
     transform: rotate(8deg) scale(1.1);
+}
+
+/* =========================================================================
+   Book Shadows (Custom Implementation)
+   ========================================================================= */
+
+/* 책 바닥 그림자 (Floor Shadow) */
+.book::before,
+.book::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    width: 50%;
+    height: 100%;
+    background: transparent;
+    /* box-shadow: 0 0 5px rgba(40, 40, 40, 0.7); */
+    pointer-events: none;
+    z-index: -1;
+    transition: opacity 2s ease-out;
+}
+
+.book::before {
+    left: 0;
+}
+
+.book::after {
+    left: 50%;
+}
+
+.book.closed-front::before,
+.book.closed-back::after {
+    opacity: 0;
+    transition: opacity 0s;
+}
+
+.book.closed-front {
+    cursor: none;
+    pointer-events: none;
+}
+
+.book.closed-front .page {
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+/* 가운데 그림자 (Spine Shadow) */
+.midShadow {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10;
+}
+
+/* 오른쪽 페이지용 가운데 그림자 */
+.midShadow.rightShadow {
+    left: 0;
+    width: 40px;
+    background-image: linear-gradient(to right,
+            rgba(53, 53, 53, 0.5) 0,
+            rgba(53, 53, 53, 0.2) 40%,
+            rgba(53, 53, 53, 0.1) 60%,
+            rgba(200, 200, 200, 0) 100%);
+}
+
+/* 왼쪽 페이지용 가운데 그림자 */
+.midShadow.leftShadow {
+    right: 0;
+    width: 102px;
+    background-image: linear-gradient(to left,
+            rgba(60, 60, 60, 0.4) 0,
+            rgba(50, 50, 50, 0.1) 54%,
+            rgba(200, 200, 200, 0) 100%);
+}
+
+/* 표지 테두리 그림자 (Cover Shadow) */
+.cover_shadow {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.cover_shadow.side .normal_left_border {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1.2%;
+    height: 100%;
+    background-image: linear-gradient(to right,
+            rgba(20, 20, 20, 0.5),
+            rgba(240, 240, 200, 0));
 }
