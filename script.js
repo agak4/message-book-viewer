@@ -41,7 +41,7 @@ const state = {
     isDraggingProgressBar: false,
     isAnimationEnabled: true,
     interactiveData: null,
-    isInteractiveInitialized: false // 인터랙티브 이미지 최초 등장 여부
+    isInteractiveInitialized: false
 };
 
 const dom = {
@@ -198,7 +198,6 @@ function renderBook() {
         const frontFace = document.createElement('div');
         frontFace.className = 'page-face front';
 
-        // 표지 전용 그림자 추가 (0번 페이지의 앞면)
         if (i === 0) {
             const coverShadow = document.createElement('div');
             coverShadow.className = 'cover_shadow side';
@@ -208,7 +207,6 @@ function renderBook() {
             frontFace.appendChild(coverShadow);
         }
 
-        // 가운데 그림자 추가 (오른쪽 페이지용)
         const rightShadow = document.createElement('div');
         rightShadow.className = 'midShadow rightShadow';
         frontFace.appendChild(rightShadow);
@@ -227,7 +225,6 @@ function renderBook() {
         const backFace = document.createElement('div');
         backFace.className = 'page-face back';
 
-        // 가운데 그림자 추가 (왼쪽 페이지용)
         const leftShadow = document.createElement('div');
         leftShadow.className = 'midShadow leftShadow';
         backFace.appendChild(leftShadow);
@@ -382,7 +379,6 @@ function createSideControlPanel() {
     });
 }
 
-// 위치 번호 매핑 (1:좌상, 2:우상, 3:좌중, 4:우하)
 const InteractivePositionMap = {
     '1': 'pos-top-left',
     '2': 'pos-top-right',
@@ -438,19 +434,16 @@ function updateInteractiveBackgrounds(pageIndex) {
     const container = document.getElementById('interactive-container');
     if (!container) return;
 
-    // 초기화 상태 체크: 표지가 열려 있는 상태에서 이미지가 소환되는 경우만 3초 지연 적용
     const isFirstTime = !state.isInteractiveInitialized && !document.body.classList.contains('is-front-cover');
 
     Array.from(container.children).forEach(frame => {
         const frameId = parseInt(frame.dataset.id, 10);
         if (activeIds.has(frameId)) {
-            // 등장할 때: 첫 소환이면 3초 지연, 이후 페이지 이동 시에는 즉시(0s) 등장
             if (frame.classList.contains('is-hidden')) {
                 frame.style.animationDelay = isFirstTime ? '3.0s' : '0s';
                 frame.classList.remove('is-hidden');
             }
         } else {
-            // 퇴장할 때: 즉시 sinking
             frame.classList.add('is-hidden');
         }
     });
@@ -464,12 +457,11 @@ function renderInteractiveFrames(dataList) {
     const container = document.getElementById('interactive-container');
     if (!container) return;
 
-    // 전체 리스트를 순회하며 모든 프레임 생성
     container.innerHTML = '';
     dataList.forEach(data => {
         const className = InteractivePositionMap[data.position] || 'pos-top-right';
         const frame = document.createElement('div');
-        frame.className = `interactive-img-frame ${className} is-hidden`; // 초기값 숨김
+        frame.className = `interactive-img-frame ${className} is-hidden`;
         frame.dataset.id = data.id;
         frame.dataset.filename = data.filename;
         frame.dataset.author = data.author;
@@ -501,7 +493,6 @@ function renderInteractiveFrames(dataList) {
 }
 
 function initInteractiveFrames() {
-    // 배경 클릭 시 모든 확대된 프레임 닫기 로직 유지
     window.addEventListener('click', () => {
         document.querySelectorAll('.interactive-img-frame').forEach(f => f.classList.remove('is-expanded'));
     });
@@ -787,7 +778,6 @@ function updateBookState() {
         if (staggerDelay < 5) staggerDelay = 5;
     }
 
-    // 책 전체 이동 속도 동기화
     if (dom.book) dom.book.style.transitionDuration = `${duration}ms`;
 
     let baseDelay = 0;
