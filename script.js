@@ -1,8 +1,8 @@
 const AppParams = {
     imagePrefix: 'photo',
-    totalImages: 127,
+    totalImages: 284,
     webpDir: 'images/webp',
-    imgDir: 'images/img',
+    imgDir: 'images/jpg',
     extension: 'webp',
     fallbackExtension: 'jpg'
 };
@@ -17,13 +17,13 @@ let supportsWebP = null;
 })();
 
 const BookmarkList = [
-    { page: 2, label: "목차", color: "#F7E5FF" },
-    { page: 4, label: "입덕 계기", color: "#E4F0FE" },
-    { page: 10, label: "클리셰란<br>나에게", color: "#E4F0FE" },
-    { page: 18, label: "좋았던 &<br>보고싶은 케미", color: "#FFE4EB" },
-    { page: 36, label: "첫인상<br>현인상", color: "#EFFFE5" },
-    { page: 78, label: "단체곡 &<br>데뷔곡 후기", color: "#F7E5FF" },
-    { page: 104, label: "1주년<br>축하 메세지", color: "#E4F0FE" }
+    { page: 3, label: "목차", color: "#F7E5FF" },
+    { page: 40, label: "리코를 생각하면<br>떠오르는 키워드", color: "#E4F0FE" },
+    { page: 54, label: "치코라서 좋았던 점", color: "#E4F0FE" },
+    { page: 72, label: "리코가 가장<br>빛났던 순간", color: "#FFE4EB" },
+    { page: 108, label: "기억에 남은<br>리코의 노래", color: "#EFFFE5" },
+    { page: 196, label: "리코에게 전하는 편지", color: "#F7E5FF" },
+    { page: 256, label: "생일 축하 팬아트", color: "#E4F0FE" }
 ];
 
 const EAGER_RADIUS = 3;
@@ -33,7 +33,7 @@ const MOBILE_BREAKPOINT = 768;
 const state = {
     currentPageIndex: 0,
     prevPageIndex: 0,
-    totalPages: Math.ceil((AppParams.totalImages + 1) / 2),
+    totalPages: Math.ceil(AppParams.totalImages / 2),
     mobileImageIndex: 0,
     isDragging: false,
     startX: 0,
@@ -78,7 +78,6 @@ function registerImg(path, el) {
 }
 
 function init() {
-    console.log('init');
     document.body.classList.add('disable-animation');
 
     createMobileView();
@@ -136,7 +135,6 @@ function getImagePath(num) {
 }
 
 function setupLayout() {
-    console.log('setupLayout');
     if (isMobile()) {
         dom.book.style.display = 'none';
         dom.mobileView.style.display = 'flex';
@@ -150,7 +148,6 @@ function setupLayout() {
 }
 
 function onResize() {
-    console.log('onResize');
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
         const nowMobile = isMobile();
@@ -170,7 +167,6 @@ function onResize() {
 }
 
 function createMobileView() {
-    console.log('createMobileView');
     const mv = document.createElement('div');
     mv.id = 'mobile-view';
 
@@ -186,11 +182,9 @@ function createMobileView() {
 }
 
 function renderBook() {
-    console.log('renderBook');
     pathToImgElements.clear();
     const fragment = document.createDocumentFragment();
 
-    // cover-page 없이 page-0의 front face(photo000)가 표지 역할을 담당
     for (let i = 0; i < state.totalPages; i++) {
         const page = document.createElement('div');
         page.className = 'page';
@@ -261,7 +255,6 @@ function renderBook() {
     const ls = document.createElement('div');
     ls.id = 'left-static';
 
-    // 왼쪽 정적 페이지 가운데 그림자 추가
     const leftShadow = document.createElement('div');
     leftShadow.className = 'midShadow leftShadow';
     ls.appendChild(leftShadow);
@@ -275,7 +268,6 @@ function renderBook() {
 }
 
 function renderBookmarks() {
-    console.log('renderBookmarks');
     const track = document.getElementById('bookmarkTrack');
     if (!track) return;
 
@@ -307,7 +299,6 @@ function renderBookmarks() {
 }
 
 function createSideControlPanel() {
-    console.log('createSideControlPanel');
     const panel = document.createElement('div');
     panel.className = 'side-control-panel show-initial';
 
@@ -400,19 +391,17 @@ const InteractivePositionMap = {
 };
 
 async function loadInteractiveData() {
-    console.log('loadInteractiveData');
     try {
         const response = await fetch('data/interactive_metadata.csv');
         const text = await response.text();
         const lines = text.trim().split('\n');
         const data = [];
 
-        // 헤더를 제외한 데이터 파싱 (filename, author, start_page, position_number)
         for (let i = 1; i < lines.length; i++) {
             const cols = lines[i].split(',');
             if (cols.length >= 4) {
                 data.push({
-                    id: i, // 고유 식별자 추가
+                    id: i,
                     filename: cols[0].trim(),
                     author: cols[1].trim(),
                     start_page: parseInt(cols[2].trim(), 10),
@@ -421,7 +410,7 @@ async function loadInteractiveData() {
             }
         }
         state.interactiveData = data;
-        renderInteractiveFrames(data); // 모든 데이터 한꺼번에 렌더링
+        renderInteractiveFrames(data);
         updateInteractiveBackgrounds(state.currentPageIndex);
     } catch (e) {
         console.error('Failed to load interactive metadata', e);
@@ -433,7 +422,6 @@ function updateInteractiveBackgrounds(pageIndex) {
 
     const actualPageNumber = pageIndex * 2;
 
-    // 현재 페이지보다 작거나 같은 start_page값들 중 최댓값(현재 세트의 기준점) 찾기
     const validPages = state.interactiveData
         .map(d => d.start_page)
         .filter(sp => sp <= actualPageNumber);
@@ -441,7 +429,6 @@ function updateInteractiveBackgrounds(pageIndex) {
     if (validPages.length === 0) return;
     const maxStartPage = Math.max(...validPages);
 
-    // 해당 maxStartPage와 정확히 일치하는 세트만 활성화
     const activeIds = new Set(
         state.interactiveData
             .filter(d => d.start_page === maxStartPage)
@@ -546,9 +533,7 @@ function updateUI() {
 }
 
 function initDrag() {
-    console.log('initDrag');
     const handleStart = (e) => {
-        console.log('handleStart', e.clientX, e.clientY);
         if (e.target.closest('.progress-container')) return;
         state.isDragging = true;
         state.startX = e.clientX;
@@ -557,7 +542,6 @@ function initDrag() {
     };
 
     const handleEnd = (e) => {
-        console.log('handleEnd', e.clientX, e.clientY);
         if (!state.isDragging) return;
         state.isDragging = false;
         dom.progressFill.classList.remove('dragging');
@@ -599,17 +583,14 @@ function initDrag() {
 }
 
 function initProgressBar() {
-    console.log('initProgressBar');
     dom.progressBar.max = 10000;
 
     const pbStart = () => {
-        console.log('pbStart');
         state.isDraggingProgressBar = true;
         dom.progressFill.classList.add('dragging');
     };
 
     const pbEnd = () => {
-        console.log('pbEnd');
         if (state.isDraggingProgressBar) {
             state.isDraggingProgressBar = false;
             updateUI();
@@ -624,7 +605,6 @@ function initProgressBar() {
     window.addEventListener('pointerup', pbEnd);
 
     dom.progressBar.addEventListener('input', (e) => {
-        console.log('progressBar input', e.target.value);
         const percent = e.target.value / 10000;
         dom.progressFill.style.width = `${percent * 100}%`;
 
@@ -672,9 +652,7 @@ function getRestingZIndex(id, flipped) {
 }
 
 function updateCenterAlign() {
-    console.log('updateCenterAlign', state.currentPageIndex);
     if (state.currentPageIndex === 0) {
-        // 표지(photo000) 상태: 책을 왼쪽으로 이동, UI 숨김
         dom.book.classList.add('closed-front');
         dom.book.classList.remove('closed-back');
         document.body.classList.add('is-front-cover');
@@ -689,7 +667,6 @@ function updateCenterAlign() {
 }
 
 function flipToPage(index) {
-    console.log('flipToPage', index);
     const clamped = Math.max(0, Math.min(index, state.totalPages));
 
     if (clamped === state.currentPageIndex) return;
@@ -702,7 +679,6 @@ function flipToPage(index) {
 }
 
 function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
-    console.log('applyPageFlip', i, flip, delay, zIndexDuringFlip, duration);
     const p = document.getElementById(`page-${i}`);
     if (!p) return;
 
@@ -772,7 +748,6 @@ function applyPageFlip(i, flip, delay, zIndexDuringFlip, duration) {
 }
 
 function updateBookState() {
-    console.log('updateBookState', state.currentPageIndex);
     const curr = state.currentPageIndex;
 
     const toFlip = [];
@@ -879,7 +854,6 @@ function updateLeftStatic() {
 }
 
 function rebuildBookFlippedState() {
-    console.log('rebuildBookFlippedState');
     const list = [];
     for (let i = 0; i < state.totalPages; i++) list.push(i);
 
@@ -913,7 +887,6 @@ function rebuildBookFlippedState() {
 }
 
 function navigateMobile(imgIndex) {
-    console.log('navigateMobile', imgIndex);
     const clamped = Math.max(0, Math.min(imgIndex, AppParams.totalImages - 1));
     if (clamped === state.mobileImageIndex) return;
     state.mobileImageIndex = clamped;
@@ -921,7 +894,6 @@ function navigateMobile(imgIndex) {
 }
 
 function updateMobileView() {
-    console.log('updateMobileView');
     const path = getImagePath(state.mobileImageIndex);
     const cached = imageCache.get(path);
 
@@ -991,7 +963,6 @@ function applyToDOM(path, src) {
 }
 
 function schedulePriority() {
-    console.log('schedulePriority');
     const centerSpread = isMobile()
         ? Math.ceil(state.mobileImageIndex / 2)
         : state.currentPageIndex;

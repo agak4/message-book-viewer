@@ -115,8 +115,6 @@ body {
     contain: layout style;
     transition: transform 1.2s cubic-bezier(0.15, 0.95, 0.2, 1);
     will-change: auto;
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
 }
 
 .page.flipped {
@@ -828,12 +826,14 @@ body.is-front-cover .interactive-img-frame,
     transition: opacity 0s;
 }
 
-.book.closed-front {
+.book.closed-front,
+.book.closed-back {
     cursor: none;
     pointer-events: none;
 }
 
-.book.closed-front .page {
+.book.closed-front .page,
+.book.closed-back .page {
     cursor: pointer;
     pointer-events: auto;
 }
