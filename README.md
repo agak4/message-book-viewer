@@ -1,1 +1,1 @@
-https://message-book-viewer.onrender.com
+https://yuzuhariko-2026-birthdaymessagebook.onrender.com/
