@@ -351,6 +351,7 @@ function renderBookmarks() {
         const percent = (bm.page / trackMax) * 100;
         const bubble = document.createElement('div');
         bubble.className = 'progress-bookmark';
+        bubble.dataset.bookmarkPercent = percent;
         bubble.style.setProperty('--bookmark-pos', `${percent}%`);
         bubble.style.setProperty('--bookmark-bg', bm.color);
         bubble.innerHTML = bm.label;
@@ -369,6 +370,28 @@ function renderBookmarks() {
 
     track.innerHTML = '';
     track.appendChild(fragment);
+
+    requestAnimationFrame(() => clampBookmarkPositions());
+}
+
+function clampBookmarkPositions() {
+    const track = document.getElementById('bookmarkTrack');
+    if (!track) return;
+    const trackWidth = window.innerWidth;
+    const MARGIN = 12;
+
+    track.querySelectorAll('.progress-bookmark').forEach(bm => {
+        const percent = parseFloat(bm.dataset.bookmarkPercent) / 100;
+        const halfW = bm.offsetWidth / 2;
+        const idealLeft = percent * trackWidth;
+        const clampedLeft = Math.max(halfW + MARGIN, Math.min(trackWidth - halfW - MARGIN, idealLeft));
+
+        const offset = idealLeft - clampedLeft;
+
+        bm.style.left = `${clampedLeft}px`;
+        bm.style.setProperty('--stem-left', `calc(50% + ${offset}px - 1px)`);
+        bm.style.setProperty('--stem-center', `calc(50% + ${offset}px)`);
+    });
 }
 
 /**
@@ -660,6 +683,7 @@ function onResize() {
 
         wasMobileRef = nowMobile;
         setupLayout();
+        clampBookmarkPositions();
     }, 150);
 }
 

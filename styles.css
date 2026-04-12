@@ -451,7 +451,7 @@ body.is-front-cover .progress-bookmark {
     content: '';
     position: absolute;
     top: 100%;
-    left: calc(50% - 1px);
+    left: var(--stem-left, calc(50% - 1px));
     width: 2px;
     height: 15px;
     background-color: var(--bookmark-bg);
@@ -460,7 +460,7 @@ body.is-front-cover .progress-bookmark {
 .progress-bookmark::after {
     content: '';
     position: absolute;
-    left: 50%;
+    left: var(--stem-center, 50%);
     transform: translateX(-50%);
     width: 6px;
     height: 6px;
@@ -833,6 +833,7 @@ body.is-front-cover .interactive-img-frame,
 }
 
 @media (min-width: 769px) {
+
     .book.closed-front,
     .book.closed-back {
         cursor: none;
