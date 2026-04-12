@@ -201,6 +201,7 @@ body {
     cursor: pointer;
     background: transparent;
     touch-action: none;
+    pointer-events: auto;
     contain: layout style paint;
 }
 
@@ -560,22 +561,27 @@ body.is-front-cover .progress-bookmark {
         display: none;
     }
 
-    .controls-container {
-        bottom: 40px;
-        width: auto;
-    }
-
-    #pageCounter {
-        font-size: 13px;
-        padding: 5px 16px;
+    .controls-container,
+    #interactive-container {
+        display: none !important;
     }
 
     .progress-container {
         height: 24px;
+        pointer-events: auto !important;
+        transform: none !important;
+        opacity: 1 !important;
     }
 
     .progress-container:hover {
         height: 24px;
+    }
+
+    body.is-front-cover .progress-container {
+        transform: none !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        transition: none !important;
     }
 
     .side-control-panel {
@@ -826,16 +832,18 @@ body.is-front-cover .interactive-img-frame,
     transition: opacity 0s;
 }
 
-.book.closed-front,
-.book.closed-back {
-    cursor: none;
-    pointer-events: none;
-}
+@media (min-width: 769px) {
+    .book.closed-front,
+    .book.closed-back {
+        cursor: none;
+        pointer-events: none;
+    }
 
-.book.closed-front .page,
-.book.closed-back .page {
-    cursor: pointer;
-    pointer-events: auto;
+    .book.closed-front .page,
+    .book.closed-back .page {
+        cursor: pointer;
+        pointer-events: auto;
+    }
 }
 
 /* 가운데 그림자 (Spine Shadow) */

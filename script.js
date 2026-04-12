@@ -530,6 +530,7 @@ function updateUI() {
             dom.progressFill.style.width = `${pct}%`;
         }
     }
+    updateCenterAlign();
 }
 
 function initDrag() {
@@ -652,11 +653,14 @@ function getRestingZIndex(id, flipped) {
 }
 
 function updateCenterAlign() {
-    if (state.currentPageIndex === 0) {
+    const isFront = isMobile() ? (state.mobileImageIndex === 0) : (state.currentPageIndex === 0);
+    const isBack = isMobile() ? (state.mobileImageIndex === AppParams.totalImages - 1) : (state.currentPageIndex === state.totalPages);
+
+    if (isFront) {
         dom.book.classList.add('closed-front');
         dom.book.classList.remove('closed-back');
         document.body.classList.add('is-front-cover');
-    } else if (state.currentPageIndex === state.totalPages) {
+    } else if (isBack) {
         dom.book.classList.add('closed-back');
         dom.book.classList.remove('closed-front');
         document.body.classList.remove('is-front-cover');
