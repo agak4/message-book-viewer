@@ -522,6 +522,7 @@ function updateUI() {
         let disp = state.currentPageIndex * 2;
         if (disp < 0) disp = 0;
         if (disp === 0) disp = 1;
+        if (disp > trackMax) disp = trackMax;
         dom.pageCounter.textContent = `Page ${disp} / ${trackMax}`;
         if (!state.isDraggingProgressBar) {
             const track = Math.min(Math.max(0, state.currentPageIndex * 2), trackMax);
