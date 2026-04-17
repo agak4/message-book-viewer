@@ -3,45 +3,23 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
-    <title>너와 만들어온 추억들 - 2026 Yuzuha Riko Birthday Message Book</title>
+    <title>사이트 이전 안내</title>
+    <script>
+        const newDomain = "https://yuzuhariko-2026-birthdaymessagebook.pages.dev/";
 
-    <link rel="preload" as="image" href="images/webp/photo000.webp" type="image/webp">
-    <link rel="preload" as="image" href="images/webp/photo001.webp" type="image/webp">
-    <link rel="preload" as="image" href="images/webp/photo002.webp" type="image/webp">
-    <link rel="preload" as="image" href="images/webp/photo003.webp" type="image/webp">
+        const currentPath = window.location.pathname;
+        const currentQuery = window.location.search;
 
-    <link rel="stylesheet" href="styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Do+Hyeon&display=swap" rel="stylesheet">
-    <link rel="icon" href="images/favicon.ico">
+        window.location.replace(newDomain + currentPath + currentQuery);
+    </script>
 </head>
 
-<body class="is-front-cover disable-animation">
-    <div class="ebook-container">
-        <div class="book-viewport">
-            <div class="book closed-front" id="book">
-
-            </div>
-        </div>
-        <div id="interactive-container"></div>
-
-        <div class="controls-container">
-            <div id="pageCounter"></div>
-        </div>
-
-        <div class="progress-container">
-            <div id="bookmarkTrack" class="bookmark-track"></div>
-            <div class="progress-bg"></div>
-            <div class="progress-fill" id="progressFill"></div>
-            <input type="range" id="progressBar" min="0" max="100" value="0">
-            <div id="pagePreview" class="page-preview">
-                <img id="previewImage" src="" alt="Preview">
-                <span id="previewText">Page 1</span>
-            </div>
-        </div>
-    </div>
-    <script src="script.js"></script>
+<body>
+    <p>사이트가 더 빠르고 안정적인 서버로 이전되었습니다.</p>
+    <p>자동으로 이동되지 않는다면 <a id="manual-link" href="#">여기</a>를 클릭해 주세요.</p>
+    <script>
+        document.getElementById('manual-link').href = newDomain + window.location.pathname + window.location.search;
+    </script>
 </body>
 
 </html>
