@@ -52,7 +52,7 @@ const BookmarkList = [
 ];
 
 /** 현재 페이지 기준으로 즉시 로드할 이웃 페이지 범위 */
-const EAGER_RADIUS = 3;
+const EAGER_RADIUS = 5;
 /** 동시에 처리할 최대 이미지 프리로드 수 */
 const PRELOAD_CONCURRENCY = 4;
 /** 모바일 레이아웃 전환 기준 너비(px) */
@@ -1238,11 +1238,6 @@ function schedulePriority() {
         i <= Math.min(state.totalPages - 1, centerSpread + EAGER_RADIUS); i++) {
         enqueue(getImagePath(i * 2), true);
         enqueue(getImagePath(i * 2 + 1), true);
-    }
-    for (let i = 0; i < state.totalPages; i++) {
-        if (Math.abs(i - centerSpread) <= EAGER_RADIUS) continue;
-        enqueue(getImagePath(i * 2));
-        enqueue(getImagePath(i * 2 + 1));
     }
 }
 
